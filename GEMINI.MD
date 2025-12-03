@@ -1,4 +1,4 @@
-# Claude Coding Rules – Next.js 16 People Management Web App (Compact)
+# GEMINI Coding Rules – Next.js 16 People Management Web App (Compact)
 
 1. UI: Use **shadcn/ui** components for all pages and components.  
    - Forms, tables, modals, filters, dashboards must follow the design system.
