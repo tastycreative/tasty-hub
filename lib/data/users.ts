@@ -1,5 +1,4 @@
 import { prisma } from "@/lib/db";
-import type { User } from "@/lib/types/user";
 
 // Type for userTeam with team relation
 interface UserTeamWithTeam {
