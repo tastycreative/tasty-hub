@@ -1,0 +1,82 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// Role enum for user permissions
+enum RoleType {
+  OWNER
+  ADMIN
+  MEMBER
+  VIEWER
+}
+
+// User model - synced from Neon Auth (Stack Auth)
+model User {
+  id            String   @id @default(cuid())
+  stackAuthId   String   @unique @map("stack_auth_id") // ID from Stack Auth
+  email         String   @unique
+  displayName   String?  @map("display_name")
+  avatarUrl     String?  @map("avatar_url")
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  userTeams     UserTeam[]
+  ownedTeams    Team[]    @relation("TeamOwner")
+
+  @@map("users")
+}
+
+// Team model
+model Team {
+  id          String   @id @default(cuid())
+  name        String
+  slug        String   @unique
+  logo        String?
+  plan        String   @default("free") // free, pro, enterprise
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  // Owner relation
+  ownerId     String   @map("owner_id")
+  owner       User     @relation("TeamOwner", fields: [ownerId], references: [id], onDelete: Cascade)
+
+  // Relations
+  userTeams   UserTeam[]
+
+  @@map("teams")
+}
+
+// UserTeam junction table - connects users to teams with roles
+model UserTeam {
+  id        String   @id @default(cuid())
+  userId    String   @map("user_id")
+  teamId    String   @map("team_id")
+  role      RoleType @default(MEMBER)
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  team      Team     @relation(fields: [teamId], references: [id], onDelete: Cascade)
+
+  // Ensure a user can only be in a team once
+  @@unique([userId, teamId])
+  @@map("user_teams")
+}
+
+// Role model - for custom roles (optional, if you need more granular permissions)
+model Role {
+  id          String   @id @default(cuid())
+  name        String   @unique
+  description String?
+  permissions Json     @default("[]") // Array of permission strings
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  @@map("roles")
+}
