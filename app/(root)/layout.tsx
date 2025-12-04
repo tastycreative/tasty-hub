@@ -3,7 +3,7 @@ import { DynamicBreadcrumb } from "@/components/dynamic-breadcrumb";
 import { SidebarProvider, SidebarInset, SidebarTrigger } from "@/components/ui/sidebar";
 import { stackServerApp } from "@/stack/server";
 import { Separator } from "@radix-ui/react-separator";
-import { ThemeToggle } from "@/components/theme-toggle";
+import { ClockInOut } from "@/components/clock-in-out";
 
 
 export default async function RootLayout({
@@ -27,8 +27,8 @@ export default async function RootLayout({
             />
             <DynamicBreadcrumb />
           </div>
-          <div className="px-4">
-            <ThemeToggle />
+          <div className="flex items-center gap-2 px-4">
+            <ClockInOut />
           </div>
         </header>
         <div className="flex flex-1 flex-col gap-4 p-4 pt-0">

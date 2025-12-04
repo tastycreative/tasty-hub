@@ -1,38 +1,55 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
 
-// Team types for navigation
+// Team types for navigation - maps slug to navigation type
 export type TeamType = "admin" | "hr" | "team";
 
 export interface TeamData {
   id: string;
   name: string;
   slug: string;
-  logo?: string;
+  logo?: string | null;
+  plan?: string;
   type: TeamType;
 }
 
-// Static teams for now
-export const STATIC_TEAMS: TeamData[] = [
-  {
-    id: "admin",
-    name: "Admin Team",
-    slug: "admin",
-    type: "admin",
-  },
-  {
-    id: "hr",
-    name: "HR Team",
-    slug: "hr",
-    type: "hr",
-  },
-  {
-    id: "ai-content",
-    name: "AI Content Team",
-    slug: "ai-content",
-    type: "team",
-  },
-];
+// Map team slug to navigation type
+export function getTeamType(slug: string): TeamType {
+  switch (slug) {
+    case "admin":
+      return "admin";
+    case "hr":
+      return "hr";
+    default:
+      return "team";
+  }
+}
+
+// Convert database team to TeamData
+export function toTeamData(team: {
+  id: string;
+  name: string;
+  slug: string;
+  logo?: string | null;
+  plan?: string;
+}): TeamData {
+  return {
+    id: team.id,
+    name: team.name,
+    slug: team.slug,
+    logo: team.logo,
+    plan: team.plan,
+    type: getTeamType(team.slug),
+  };
+}
+
+// Default empty team (shown when no teams loaded yet)
+const DEFAULT_TEAM: TeamData = {
+  id: "",
+  name: "Loading...",
+  slug: "",
+  type: "team",
+};
 
 // Helper to set cookie
 function setTeamCookie(teamType: TeamType) {
@@ -49,6 +66,10 @@ function getTeamFromCookie(): TeamType | null {
 }
 
 interface SidebarState {
+  // Available teams (loaded from database)
+  teams: TeamData[];
+  setTeams: (teams: TeamData[]) => void;
+
   // Selected team
   selectedTeam: TeamData;
   setSelectedTeam: (team: TeamData) => void;
@@ -70,8 +91,23 @@ interface SidebarState {
 export const useSidebarStore = create<SidebarState>()(
   persist(
     (set, get) => ({
-      // Default to first team
-      selectedTeam: STATIC_TEAMS[0],
+      // Available teams (empty until loaded from database)
+      teams: [],
+      setTeams: (teams) => {
+        const currentSelected = get().selectedTeam;
+        // If the currently selected team exists in new teams, keep it
+        const stillExists = teams.find((t) => t.id === currentSelected.id);
+        if (!stillExists && teams.length > 0) {
+          // Select the first team if current selection doesn't exist
+          set({ teams, selectedTeam: teams[0] });
+          setTeamCookie(teams[0].type);
+        } else {
+          set({ teams });
+        }
+      },
+
+      // Default to empty team until loaded
+      selectedTeam: DEFAULT_TEAM,
       setSelectedTeam: (team) => {
         setTeamCookie(team.type);
         set({ selectedTeam: team });
@@ -88,17 +124,15 @@ export const useSidebarStore = create<SidebarState>()(
       toggleCollapsed: () =>
         set((state) => ({ isCollapsed: !state.isCollapsed })),
 
-      // Initialize from cookie (call on app mount)
+      // Initialize from cookie on client
       initFromCookie: () => {
-        const cookieTeamType = getTeamFromCookie();
-        if (cookieTeamType) {
-          const team = STATIC_TEAMS.find((t) => t.type === cookieTeamType);
-          if (team && team.id !== get().selectedTeam.id) {
+        const teamType = getTeamFromCookie();
+        if (teamType) {
+          const teams = get().teams;
+          const team = teams.find((t) => t.type === teamType);
+          if (team) {
             set({ selectedTeam: team });
           }
-        } else {
-          // No cookie set, set it from current state
-          setTeamCookie(get().selectedTeam.type);
         }
       },
     }),
@@ -109,7 +143,7 @@ export const useSidebarStore = create<SidebarState>()(
         isCollapsed: state.isCollapsed,
       }),
       onRehydrateStorage: () => (state) => {
-        // When store rehydrates from localStorage, sync cookie
+        // Sync cookie with persisted state on rehydration
         if (state?.selectedTeam) {
           setTeamCookie(state.selectedTeam.type);
         }

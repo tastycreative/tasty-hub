@@ -26,7 +26,8 @@ model User {
 
   // Relations
   userTeams     UserTeam[]
-  ownedTeams    Team[]    @relation("TeamOwner")
+  ownedTeams    Team[]       @relation("TeamOwner")
+  attendance    Attendance[]
 
   @@map("users")
 }
@@ -79,4 +80,67 @@ model Role {
   updatedAt   DateTime @updatedAt @map("updated_at")
 
   @@map("roles")
+}
+
+// Attendance status enum
+enum AttendanceStatus {
+  CLOCKED_IN
+  CLOCKED_OUT
+  ON_BREAK
+  ABSENT
+}
+
+// Attendance model - for clock in/out tracking
+model Attendance {
+  id           String           @id @default(cuid())
+  userId       String           @map("user_id")
+  timezone     String           @default("UTC") // User's timezone (e.g., "America/New_York", "Asia/Manila")
+  date         DateTime         @db.Date // The date of the attendance record (in user's local timezone)
+  clockIn      DateTime?        @map("clock_in") @db.Timestamptz // Timezone-aware timestamp
+  clockOut     DateTime?        @map("clock_out") @db.Timestamptz // Timezone-aware timestamp
+  totalBreak   Int              @default(0) @map("total_break") // Total break time in minutes (sum of all breaks)
+  duration     Int?             // Total work duration in minutes (calculated on clock out)
+  status       AttendanceStatus @default(CLOCKED_OUT)
+  notes        String?
+  // Shift report fields (markdown support)
+  shiftReport  String?          @map("shift_report") @db.Text // Markdown content for shift report
+  reportedAt   DateTime?        @map("reported_at") @db.Timestamptz // When the report was submitted
+  createdAt    DateTime         @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt    DateTime         @updatedAt @map("updated_at") @db.Timestamptz
+
+  // Relations
+  user         User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  breaks       Break[]          // Multiple breaks per attendance
+
+  // Unique constraint: one attendance record per user per day
+  @@unique([userId, date])
+  @@index([userId, date])
+  @@map("attendance")
+}
+
+// Break model - for tracking multiple breaks per attendance
+model Break {
+  id           String     @id @default(cuid())
+  attendanceId String     @map("attendance_id")
+  startTime    DateTime   @map("start_time") @db.Timestamptz
+  endTime      DateTime?  @map("end_time") @db.Timestamptz
+  duration     Int?       // Duration in minutes (calculated when break ends)
+  type         BreakType  @default(SHORT) // Type of break
+  notes        String?
+  createdAt    DateTime   @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt    DateTime   @updatedAt @map("updated_at") @db.Timestamptz
+
+  // Relations
+  attendance   Attendance @relation(fields: [attendanceId], references: [id], onDelete: Cascade)
+
+  @@index([attendanceId])
+  @@map("breaks")
+}
+
+// Break type enum
+enum BreakType {
+  SHORT      // 15 min break
+  LUNCH      // Lunch break (30-60 min)
+  PERSONAL   // Personal break
+  OTHER
 }

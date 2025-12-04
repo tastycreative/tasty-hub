@@ -1,5 +1,7 @@
 "use client";
 
+import { useState } from "react";
+import { useRouter } from "next/navigation";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import {
@@ -13,70 +15,94 @@ import {
 import { MoreHorizontal, Pencil, Trash2, UserCog } from "lucide-react";
 import { RoleBadge } from "./role-badge";
 import { StatusBadge } from "./status-badge";
+import { ManageRolesDialog } from "./manage-roles-dialog";
 
 interface UsersTableProps {
   users: User[];
 }
 
 export function UsersTable({ users }: UsersTableProps) {
+  const [selectedUser, setSelectedUser] = useState<User | null>(null);
+  const [rolesDialogOpen, setRolesDialogOpen] = useState(false);
+  const router = useRouter();
+
+  const handleManageRoles = (user: User) => {
+    setSelectedUser(user);
+    setRolesDialogOpen(true);
+  };
+
+  const handleRolesSuccess = () => {
+    // Refresh the page data
+    router.refresh();
+  };
+
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>All Users</CardTitle>
-        <CardDescription>
-          A list of all users in your organization
-        </CardDescription>
-      </CardHeader>
-      <CardContent>
-        <div className="rounded-md border">
-          <table className="w-full">
-            <thead>
-              <tr className="border-b bg-muted/50">
-                <th className="p-3 text-left font-medium">Name</th>
-                <th className="p-3 text-left font-medium">Email</th>
-                <th className="p-3 text-left font-medium">Role</th>
-                <th className="p-3 text-left font-medium">Teams</th>
-                <th className="p-3 text-left font-medium">Status</th>
-                <th className="p-3 text-left font-medium">Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {users.length > 0 ? (
-                users.map((user) => (
-                  <tr key={user.id} className="border-b last:border-0">
-                    <td className="p-3">
-                      <div className="flex items-center gap-3">
-                        <UserAvatar user={user} />
-                        <span className="font-medium">{user.name}</span>
-                      </div>
-                    </td>
-                    <td className="p-3 text-muted-foreground">{user.email}</td>
-                    <td className="p-3">
-                      <RoleBadge role={user.role} />
-                    </td>
-                    <td className="p-3">
-                      <TeamsList teams={user.teams} />
-                    </td>
-                    <td className="p-3">
-                      <StatusBadge status={user.status} />
-                    </td>
-                    <td className="p-3">
-                      <UserActions user={user} />
+    <>
+      <Card>
+        <CardHeader>
+          <CardTitle>All Users</CardTitle>
+          <CardDescription>
+            A list of all users in your organization
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="rounded-md border">
+            <table className="w-full">
+              <thead>
+                <tr className="border-b bg-muted/50">
+                  <th className="p-3 text-left font-medium">Name</th>
+                  <th className="p-3 text-left font-medium">Email</th>
+                  <th className="p-3 text-left font-medium">Role</th>
+                  <th className="p-3 text-left font-medium">Teams</th>
+                  <th className="p-3 text-left font-medium">Status</th>
+                  <th className="p-3 text-left font-medium">Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {users.length > 0 ? (
+                  users.map((user) => (
+                    <tr key={user.id} className="border-b last:border-0">
+                      <td className="p-3">
+                        <div className="flex items-center gap-3">
+                          <UserAvatar user={user} />
+                          <span className="font-medium">{user.name}</span>
+                        </div>
+                      </td>
+                      <td className="p-3 text-muted-foreground">{user.email}</td>
+                      <td className="p-3">
+                        <RoleBadge role={user.role} />
+                      </td>
+                      <td className="p-3">
+                        <TeamsList teams={user.teams} />
+                      </td>
+                      <td className="p-3">
+                        <StatusBadge status={user.status} />
+                      </td>
+                      <td className="p-3">
+                        <UserActions user={user} onManageRoles={handleManageRoles} />
+                      </td>
+                    </tr>
+                  ))
+                ) : (
+                  <tr>
+                    <td colSpan={6} className="p-8 text-center text-muted-foreground">
+                      No users found. Add your first user to get started.
                     </td>
                   </tr>
-                ))
-              ) : (
-                <tr>
-                  <td colSpan={6} className="p-8 text-center text-muted-foreground">
-                    No users found. Add your first user to get started.
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
-      </CardContent>
-    </Card>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </CardContent>
+      </Card>
+
+      <ManageRolesDialog
+        user={selectedUser}
+        open={rolesDialogOpen}
+        onOpenChange={setRolesDialogOpen}
+        onSuccess={handleRolesSuccess}
+      />
+    </>
   );
 }
 
@@ -127,15 +153,16 @@ function TeamsList({ teams }: { teams: User["teams"] }) {
 }
 
 // User Actions Dropdown
-function UserActions({ user }: { user: User }) {
+function UserActions({
+  user,
+  onManageRoles,
+}: {
+  user: User;
+  onManageRoles: (user: User) => void;
+}) {
   const handleEdit = () => {
     console.log("Edit user:", user.id);
     // TODO: Implement edit modal
-  };
-
-  const handleManageRoles = () => {
-    console.log("Manage roles for:", user.id);
-    // TODO: Implement role management
   };
 
   const handleDelete = () => {
@@ -158,7 +185,7 @@ function UserActions({ user }: { user: User }) {
           <Pencil className="mr-2 h-4 w-4" />
           Edit
         </DropdownMenuItem>
-        <DropdownMenuItem onClick={handleManageRoles}>
+        <DropdownMenuItem onClick={() => onManageRoles(user)}>
           <UserCog className="mr-2 h-4 w-4" />
           Manage Roles
         </DropdownMenuItem>

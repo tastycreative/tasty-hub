@@ -26,6 +26,7 @@ import { NavMain } from "@/components/nav-main";
 import { NavProjects } from "@/components/nav-projects";
 import { NavUser } from "@/components/nav-user";
 import { TeamSwitcher } from "@/components/team-switcher";
+import { ThemeToggle } from "@/components/theme-toggle";
 import {
   Sidebar,
   SidebarContent,
@@ -35,8 +36,12 @@ import {
   SidebarMenuButton,
   SidebarMenuItem,
   SidebarRail,
+  SidebarGroup,
+  SidebarGroupLabel,
+  useSidebar,
 } from "@/components/ui/sidebar";
-import { useSidebarStore, STATIC_TEAMS, type TeamType } from "@/lib/stores/sidebar-store";
+import { Skeleton } from "@/components/ui/skeleton";
+import { useSidebarStore, toTeamData, type TeamType, type TeamData } from "@/lib/stores/sidebar-store";
 
 // Navigation config for Admin Team
 const adminNavMain = [
@@ -118,6 +123,68 @@ const adminNavMain = [
       {
         title: "Audit Logs",
         url: "/admin/settings/audit",
+      },
+    ],
+  },
+  // Team routes available to Admin
+  {
+    title: "Attendance",
+    url: "#",
+    icon: Clock,
+    items: [
+      {
+        title: "Clock In/Out",
+        url: "/team/attendance",
+      },
+      {
+        title: "My Timesheet",
+        url: "/team/attendance/timesheet",
+      },
+      {
+        title: "Leave Requests",
+        url: "/team/attendance/leave",
+      },
+      {
+        title: "Schedule",
+        url: "/team/attendance/schedule",
+      },
+    ],
+  },
+  {
+    title: "My Team",
+    url: "#",
+    icon: UsersRound,
+    items: [
+      {
+        title: "Members",
+        url: "/team/members",
+      },
+      {
+        title: "Directory",
+        url: "/team/directory",
+      },
+      {
+        title: "Calendar",
+        url: "/team/calendar",
+      },
+    ],
+  },
+  {
+    title: "My Profile",
+    url: "#",
+    icon: UserCog,
+    items: [
+      {
+        title: "Profile",
+        url: "/team/profile",
+      },
+      {
+        title: "My Documents",
+        url: "/team/profile/documents",
+      },
+      {
+        title: "Settings",
+        url: "/team/profile/settings",
       },
     ],
   },
@@ -231,6 +298,68 @@ const hrNavMain = [
       {
         title: "Templates",
         url: "/hr/settings/templates",
+      },
+    ],
+  },
+  // Team routes available to HR
+  {
+    title: "Attendance",
+    url: "#",
+    icon: Clock,
+    items: [
+      {
+        title: "Clock In/Out",
+        url: "/team/attendance",
+      },
+      {
+        title: "My Timesheet",
+        url: "/team/attendance/timesheet",
+      },
+      {
+        title: "Leave Requests",
+        url: "/team/attendance/leave",
+      },
+      {
+        title: "Schedule",
+        url: "/team/attendance/schedule",
+      },
+    ],
+  },
+  {
+    title: "My Team",
+    url: "#",
+    icon: UsersRound,
+    items: [
+      {
+        title: "Members",
+        url: "/team/members",
+      },
+      {
+        title: "Directory",
+        url: "/team/directory",
+      },
+      {
+        title: "Calendar",
+        url: "/team/calendar",
+      },
+    ],
+  },
+  {
+    title: "My Profile",
+    url: "#",
+    icon: UserCog,
+    items: [
+      {
+        title: "Profile",
+        url: "/team/profile",
+      },
+      {
+        title: "My Documents",
+        url: "/team/profile/documents",
+      },
+      {
+        title: "Settings",
+        url: "/team/profile/settings",
       },
     ],
   },
@@ -358,11 +487,11 @@ function getNavigationForTeam(teamType: TeamType) {
   }
 }
 
-// Transform store teams to UI teams
-function getTeamsWithIcons() {
-  return STATIC_TEAMS.map((team) => ({
+// Transform teams to UI teams with icons
+function getTeamsWithIcons(teams: TeamData[]) {
+  return teams.map((team) => ({
     ...team,
-    logo: teamIcons[team.id] || Sparkles,
+    logo: teamIcons[team.slug] || teamIcons[team.type] || Sparkles,
   }));
 }
 
@@ -384,22 +513,44 @@ function getTeamDashboardUrl(teamType: TeamType): string {
 
 export function AppSidebar({ ...props }: AppSidebarProps) {
   const router = useRouter();
-  const { selectedTeam, setSelectedTeam } = useSidebarStore();
+  const { teams: storeTeams, setTeams, selectedTeam, setSelectedTeam } = useSidebarStore();
   const [isHydrated, setIsHydrated] = React.useState(false);
+  const [isLoading, setIsLoading] = React.useState(true);
 
   // Wait for hydration to prevent mismatch
   React.useEffect(() => {
     setIsHydrated(true);
   }, []);
 
+  // Fetch teams from API
+  React.useEffect(() => {
+    async function fetchTeams() {
+      try {
+        const response = await fetch("/api/teams");
+        if (response.ok) {
+          const dbTeams = await response.json();
+          if (dbTeams.length > 0) {
+            const teamData = dbTeams.map((t: { id: string; name: string; slug: string; logo?: string | null; plan?: string }) => toTeamData(t));
+            setTeams(teamData);
+          }
+        }
+      } catch (error) {
+        console.error("Error fetching teams:", error);
+      } finally {
+        setIsLoading(false);
+      }
+    }
+    fetchTeams();
+  }, [setTeams]);
+
   // Get teams with icons
-  const teams = React.useMemo(() => getTeamsWithIcons(), []);
+  const teams = React.useMemo(() => getTeamsWithIcons(storeTeams), [storeTeams]);
 
   // Get current active team with icon
   const activeTeam = React.useMemo(() => {
     return {
       ...selectedTeam,
-      logo: teamIcons[selectedTeam.id] || Sparkles,
+      logo: teamIcons[selectedTeam.slug] || teamIcons[selectedTeam.type] || Sparkles,
     };
   }, [selectedTeam]);
 
@@ -412,38 +563,98 @@ export function AppSidebar({ ...props }: AppSidebarProps) {
   // Handle team change - update store and redirect to team dashboard
   const handleTeamChange = React.useCallback(
     (team: (typeof teams)[0]) => {
-      const storeTeam = STATIC_TEAMS.find((t) => t.id === team.id);
+      const storeTeam = storeTeams.find((t) => t.id === team.id);
       if (storeTeam) {
         setSelectedTeam(storeTeam);
         // Redirect to the team's dashboard
         router.push(getTeamDashboardUrl(storeTeam.type));
       }
     },
-    [setSelectedTeam, router]
+    [storeTeams, setSelectedTeam, router]
   );
 
   // Show skeleton during hydration
-  if (!isHydrated) {
+  if (!isHydrated || isLoading) {
     return (
       <Sidebar collapsible="icon" {...props}>
         <SidebarHeader>
+          {/* Logo skeleton */}
           <SidebarMenu>
             <SidebarMenuItem>
               <SidebarMenuButton size="lg" asChild>
-                <Link href="/dashboard">
-                  <div className="grid flex-1 text-left text-sm leading-tight">
-                    <span className="truncate font-semibold">Tasty Hub</span>
-                    <span className="truncate text-xs text-muted-foreground">
-                      Loading...
-                    </span>
+                <div className="flex items-center gap-2">
+                  <Skeleton className="h-8 w-8 rounded-lg" />
+                  <div className="grid flex-1 text-left text-sm leading-tight gap-1">
+                    <Skeleton className="h-4 w-20" />
+                    <Skeleton className="h-3 w-28" />
                   </div>
-                </Link>
+                </div>
               </SidebarMenuButton>
             </SidebarMenuItem>
           </SidebarMenu>
+          {/* Team switcher skeleton */}
+          <SidebarMenu>
+            <SidebarMenuItem>
+              <div className="flex items-center gap-2 rounded-md border p-2">
+                <Skeleton className="h-8 w-8 rounded-lg" />
+                <div className="flex-1 space-y-1">
+                  <Skeleton className="h-4 w-24" />
+                  <Skeleton className="h-3 w-16" />
+                </div>
+                <Skeleton className="h-4 w-4" />
+              </div>
+            </SidebarMenuItem>
+          </SidebarMenu>
         </SidebarHeader>
-        <SidebarContent />
-        <SidebarFooter />
+        <SidebarContent>
+          {/* Navigation skeleton */}
+          <SidebarGroup>
+            <SidebarGroupLabel>
+              <Skeleton className="h-3 w-16" />
+            </SidebarGroupLabel>
+            <SidebarMenu>
+              {[1, 2, 3, 4].map((i) => (
+                <SidebarMenuItem key={i}>
+                  <div className="flex items-center gap-2 rounded-md p-2">
+                    <Skeleton className="h-4 w-4" />
+                    <Skeleton className="h-4 flex-1" style={{ animationDelay: `${i * 100}ms` }} />
+                  </div>
+                </SidebarMenuItem>
+              ))}
+            </SidebarMenu>
+          </SidebarGroup>
+          {/* Docs skeleton */}
+          <SidebarGroup>
+            <SidebarGroupLabel>
+              <Skeleton className="h-3 w-12" />
+            </SidebarGroupLabel>
+            <SidebarMenu>
+              {[1, 2, 3].map((i) => (
+                <SidebarMenuItem key={i}>
+                  <div className="flex items-center gap-2 rounded-md p-2">
+                    <Skeleton className="h-4 w-4" />
+                    <Skeleton className="h-4 flex-1" style={{ animationDelay: `${i * 100 + 400}ms` }} />
+                  </div>
+                </SidebarMenuItem>
+              ))}
+            </SidebarMenu>
+          </SidebarGroup>
+        </SidebarContent>
+        <SidebarFooter>
+          {/* User skeleton */}
+          <SidebarMenu>
+            <SidebarMenuItem>
+              <div className="flex items-center gap-2 rounded-md p-2">
+                <Skeleton className="h-8 w-8 rounded-full" />
+                <div className="flex-1 space-y-1">
+                  <Skeleton className="h-4 w-24" />
+                  <Skeleton className="h-3 w-32" />
+                </div>
+                <Skeleton className="h-4 w-4" />
+              </div>
+            </SidebarMenuItem>
+          </SidebarMenu>
+        </SidebarFooter>
         <SidebarRail />
       </Sidebar>
     );
@@ -455,12 +666,15 @@ export function AppSidebar({ ...props }: AppSidebarProps) {
         <SidebarMenu>
           <SidebarMenuItem>
             <SidebarMenuButton size="lg" asChild>
-              <Link href="/dashboard">
+              <Link href="/dashboard" className="flex items-center justify-between w-full">
                 <div className="grid flex-1 text-left text-sm leading-tight">
                   <span className="truncate font-semibold">Tasty Hub</span>
                   <span className="truncate text-xs text-muted-foreground">
                     Management Platform
                   </span>
+                </div>
+                <div className="group-data-[collapsible=icon]:hidden">
+                  <ThemeToggle />
                 </div>
               </Link>
             </SidebarMenuButton>
