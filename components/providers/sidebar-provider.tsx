@@ -2,6 +2,7 @@
 
 import * as React from "react";
 import { useUser } from "@stackframe/stack";
+import { useMyTeams, type Team } from "@/lib/hooks/use-teams";
 
 interface TeamData {
   id: string;
@@ -9,7 +10,8 @@ interface TeamData {
   logo: string | null;
   plan: string;
   role: string;
-  type?: "admin" | "hr" | "normal";
+  slug?: string;
+  memberCount?: number;
 }
 
 interface UserData {
@@ -36,38 +38,10 @@ export function useSidebarContext() {
   return context;
 }
 
-// Static teams for now - will be replaced with database teams later
-const STATIC_TEAMS: TeamData[] = [
-  {
-    id: "admin-team",
-    name: "Admin Team",
-    logo: null,
-    plan: "enterprise",
-    role: "ADMIN",
-    type: "admin",
-  },
-  {
-    id: "hr-team",
-    name: "HR Team",
-    logo: null,
-    plan: "pro",
-    role: "ADMIN",
-    type: "hr",
-  },
-  {
-    id: "ai-content-team",
-    name: "AI Content Team",
-    logo: null,
-    plan: "pro",
-    role: "MEMBER",
-    type: "normal",
-  },
-];
-
 export function SidebarContextProvider({ children }: { children: React.ReactNode }) {
   const stackUser = useUser();
+  const { data: teamsData, isLoading: isTeamsLoading } = useMyTeams();
   const [activeTeam, setActiveTeam] = React.useState<TeamData | null>(null);
-  const [isLoading, setIsLoading] = React.useState(true);
 
   // Initialize user data from Stack Auth
   const user: UserData | null = stackUser
@@ -78,10 +52,21 @@ export function SidebarContextProvider({ children }: { children: React.ReactNode
       }
     : null;
 
-  // Use static teams for now
-  const teams = STATIC_TEAMS;
+  // Transform teams from API to TeamData format
+  const teams: TeamData[] = React.useMemo(() => {
+    if (!teamsData) return [];
+    return teamsData.map((team: Team) => ({
+      id: team.id,
+      name: team.name,
+      logo: team.logo,
+      plan: team.plan,
+      role: team.role,
+      slug: team.slug,
+      memberCount: team.memberCount,
+    }));
+  }, [teamsData]);
 
-  // Set initial active team
+  // Set initial active team when teams are loaded
   React.useEffect(() => {
     if (teams.length > 0 && !activeTeam) {
       // Try to restore from localStorage
@@ -89,7 +74,6 @@ export function SidebarContextProvider({ children }: { children: React.ReactNode
       const savedTeam = teams.find((t) => t.id === savedTeamId);
       setActiveTeam(savedTeam || teams[0]);
     }
-    setIsLoading(false);
   }, [teams, activeTeam]);
 
   // Save active team to localStorage
@@ -104,9 +88,9 @@ export function SidebarContextProvider({ children }: { children: React.ReactNode
       teams,
       activeTeam,
       setActiveTeam: handleSetActiveTeam,
-      isLoading,
+      isLoading: isTeamsLoading,
     }),
-    [user, teams, activeTeam, handleSetActiveTeam, isLoading]
+    [user, teams, activeTeam, handleSetActiveTeam, isTeamsLoading]
   );
 
   return (

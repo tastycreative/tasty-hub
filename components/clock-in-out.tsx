@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback, useMemo } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { Button } from "@/components/ui/button";
 import {
   Tooltip,
@@ -23,27 +23,15 @@ import { Clock, Play, Square, Coffee, ChevronDown, Utensils, User, MoreHorizonta
 import { cn } from "@/lib/utils";
 import { DateTime } from "luxon";
 import { ShiftReportModal } from "@/components/shift-report-modal";
+import { 
+  useAttendance, 
+  useAttendanceAction, 
+  useSubmitShiftReport,
+  type Attendance,
+  type Break,
+} from "@/lib/hooks/use-attendance";
 
-type AttendanceStatus = "CLOCKED_IN" | "CLOCKED_OUT" | "ON_BREAK" | "ABSENT";
 type BreakType = "SHORT" | "LUNCH" | "PERSONAL" | "OTHER";
-
-interface Break {
-  id: string;
-  startTime: string;
-  endTime: string | null;
-  duration: number | null;
-  type: BreakType;
-}
-
-interface Attendance {
-  id: string;
-  clockIn: string | null;
-  clockOut: string | null;
-  status: AttendanceStatus;
-  totalBreak: number;
-  duration: number | null;
-  breaks: Break[];
-}
 
 function formatDuration(seconds: number): string {
   const hours = Math.floor(seconds / 3600);
@@ -65,11 +53,17 @@ function getTimezoneLabel(timezone: string): string {
 }
 
 export function ClockInOut() {
-  const [attendance, setAttendance] = useState<Attendance | null>(null);
-  const [activeBreak, setActiveBreak] = useState<Break | null>(null);
+  // TanStack Query hooks
+  const { data, isLoading } = useAttendance();
+  const attendanceAction = useAttendanceAction();
+  const submitShiftReport = useSubmitShiftReport();
+  
+  // Extract attendance and activeBreak from query data
+  const attendance = data?.attendance ?? null;
+  const activeBreak = data?.activeBreak ?? null;
+  
+  // Local state for timer and UI
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
-  const [isLoading, setIsLoading] = useState(true);
-  const [isActionLoading, setIsActionLoading] = useState(false);
   const [currentTime, setCurrentTime] = useState<{ local: string; la: string }>({
     local: "",
     la: "",
@@ -86,31 +80,6 @@ export function ClockInOut() {
 
   // LA timezone
   const laTimezone = "America/Los_Angeles";
-
-  // Fetch current attendance status
-  const fetchAttendance = useCallback(async () => {
-    try {
-      const response = await fetch(`/api/attendance?timezone=${encodeURIComponent(timezone)}`, {
-        headers: {
-          "x-timezone": timezone,
-        },
-      });
-      if (response.ok) {
-        const data = await response.json();
-        setAttendance(data.attendance);
-        setActiveBreak(data.activeBreak);
-      }
-    } catch (error) {
-      console.error("Failed to fetch attendance:", error);
-    } finally {
-      setIsLoading(false);
-    }
-  }, [timezone]);
-
-  // Initial fetch
-  useEffect(() => {
-    fetchAttendance();
-  }, [fetchAttendance]);
 
   // Single synchronized timer for both current time and elapsed time
   useEffect(() => {
@@ -158,62 +127,30 @@ export function ClockInOut() {
     };
   }, [timezone, attendance, activeBreak]);
 
-  // Handle clock actions
-  const handleAction = async (action: string, breakType?: BreakType) => {
-    setIsActionLoading(true);
-    try {
-      const response = await fetch("/api/attendance", {
-        method: "POST",
-        headers: { 
-          "Content-Type": "application/json",
-          "x-timezone": timezone,
+  // Handle clock actions using mutation
+  const handleAction = (action: "clock_in" | "clock_out" | "start_break" | "end_break", breakType?: BreakType) => {
+    attendanceAction.mutate(
+      { action, breakType },
+      {
+        onSuccess: (data) => {
+          // Show shift report modal after clocking out
+          if (action === "clock_out" && data.attendance) {
+            setClockedOutAttendance(data.attendance);
+            setShowReportModal(true);
+          }
         },
-        body: JSON.stringify({ action, timezone, breakType }),
-      });
-
-      if (response.ok) {
-        const data = await response.json();
-        setAttendance(data.attendance);
-        setActiveBreak(data.activeBreak);
-        
-        // Show shift report modal after clocking out
-        if (action === "clock_out" && data.attendance) {
-          setClockedOutAttendance(data.attendance);
-          setShowReportModal(true);
-        }
       }
-    } catch (error) {
-      console.error("Failed to perform action:", error);
-    } finally {
-      setIsActionLoading(false);
-    }
+    );
   };
 
-  // Handle shift report submission
+  // Handle shift report submission using mutation
   const handleSubmitReport = async (report: string) => {
     if (!clockedOutAttendance) return;
     
-    try {
-      const response = await fetch("/api/attendance", {
-        method: "PATCH",
-        headers: { 
-          "Content-Type": "application/json",
-          "x-timezone": timezone,
-        },
-        body: JSON.stringify({ 
-          attendanceId: clockedOutAttendance.id, 
-          shiftReport: report,
-          timezone 
-        }),
-      });
-
-      if (response.ok) {
-        const data = await response.json();
-        setAttendance(data.attendance);
-      }
-    } catch (error) {
-      console.error("Failed to submit shift report:", error);
-    }
+    submitShiftReport.mutate({
+      attendanceId: clockedOutAttendance.id,
+      shiftReport: report,
+    });
   };
 
   // Handle modal close
@@ -333,7 +270,7 @@ export function ClockInOut() {
                 variant="outline"
                 size="sm"
                 onClick={() => handleAction("clock_in")}
-                disabled={isActionLoading}
+                disabled={attendanceAction.isPending}
                 className="gap-1.5 text-green-600 border-green-600/30 hover:bg-green-500/10 hover:text-green-600"
               >
                 <Play className="h-3.5 w-3.5" />
@@ -351,7 +288,7 @@ export function ClockInOut() {
               <Button
                 variant="outline"
                 size="sm"
-                disabled={isActionLoading}
+                disabled={attendanceAction.isPending}
                 className={cn(
                   "gap-1",
                   isOnBreak
