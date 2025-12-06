@@ -126,29 +126,11 @@ const adminNavMain = [
       },
     ],
   },
-  // Team routes available to Admin
+  // Timesheet for Admin
   {
-    title: "Attendance",
-    url: "#",
+    title: "My Timesheet",
+    url: "/admin/timesheet",
     icon: Clock,
-    items: [
-      {
-        title: "Clock In/Out",
-        url: "/team/attendance",
-      },
-      {
-        title: "My Timesheet",
-        url: "/team/attendance/timesheet",
-      },
-      {
-        title: "Leave Requests",
-        url: "/team/attendance/leave",
-      },
-      {
-        title: "Schedule",
-        url: "/team/attendance/schedule",
-      },
-    ],
   },
   {
     title: "My Team",
@@ -157,15 +139,15 @@ const adminNavMain = [
     items: [
       {
         title: "Members",
-        url: "/team/members",
+        url: "/admin/members",
       },
       {
         title: "Directory",
-        url: "/team/directory",
+        url: "/admin/directory",
       },
       {
         title: "Calendar",
-        url: "/team/calendar",
+        url: "/admin/calendar",
       },
     ],
   },
@@ -176,15 +158,15 @@ const adminNavMain = [
     items: [
       {
         title: "Profile",
-        url: "/team/profile",
+        url: "/admin/profile",
       },
       {
         title: "My Documents",
-        url: "/team/profile/documents",
+        url: "/admin/profile/documents",
       },
       {
         title: "Settings",
-        url: "/team/profile/settings",
+        url: "/admin/profile/settings",
       },
     ],
   },
@@ -215,14 +197,7 @@ const hrNavMain = [
         title: "All Employees",
         url: "/hr/employees",
       },
-      {
-        title: "Add Employee",
-        url: "/hr/employees/add",
-      },
-      {
-        title: "Org Chart",
-        url: "/hr/org-chart",
-      },
+     
     ],
   },
   {
@@ -244,29 +219,7 @@ const hrNavMain = [
       },
     ],
   },
-  {
-    title: "Recruitment",
-    url: "#",
-    icon: UserPlus,
-    items: [
-      {
-        title: "Job Postings",
-        url: "/hr/recruitment/jobs",
-      },
-      {
-        title: "Candidates",
-        url: "/hr/recruitment/candidates",
-      },
-      {
-        title: "Interviews",
-        url: "/hr/recruitment/interviews",
-      },
-      {
-        title: "Onboarding",
-        url: "/hr/onboarding",
-      },
-    ],
-  },
+  
   {
     title: "Employee Records",
     url: "#",
@@ -301,29 +254,17 @@ const hrNavMain = [
       },
     ],
   },
-  // Team routes available to HR
+  // Attendance for HR (manages all users)
   {
     title: "Attendance",
-    url: "#",
+    url: "/hr/attendance",
+    icon: ClipboardCheck,
+  },
+  // Timesheet for HR
+  {
+    title: "My Timesheet",
+    url: "/hr/timesheet",
     icon: Clock,
-    items: [
-      {
-        title: "Clock In/Out",
-        url: "/team/attendance",
-      },
-      {
-        title: "My Timesheet",
-        url: "/team/attendance/timesheet",
-      },
-      {
-        title: "Leave Requests",
-        url: "/team/attendance/leave",
-      },
-      {
-        title: "Schedule",
-        url: "/team/attendance/schedule",
-      },
-    ],
   },
   {
     title: "My Team",
@@ -332,15 +273,15 @@ const hrNavMain = [
     items: [
       {
         title: "Members",
-        url: "/team/members",
+        url: "/hr/members",
       },
       {
         title: "Directory",
-        url: "/team/directory",
+        url: "/hr/directory",
       },
       {
         title: "Calendar",
-        url: "/team/calendar",
+        url: "/hr/calendar",
       },
     ],
   },
@@ -351,15 +292,15 @@ const hrNavMain = [
     items: [
       {
         title: "Profile",
-        url: "/team/profile",
+        url: "/hr/profile",
       },
       {
         title: "My Documents",
-        url: "/team/profile/documents",
+        url: "/hr/profile/documents",
       },
       {
         title: "Settings",
-        url: "/team/profile/settings",
+        url: "/hr/profile/settings",
       },
     ],
   },
@@ -386,28 +327,10 @@ const hrDocs = [
 // Navigation config for Normal Team (e.g., AI Content Team)
 const normalNavMain = [
   {
-    title: "Attendance",
-    url: "#",
+    title: "My Timesheet",
+    url: "/team/timesheet",
     icon: Clock,
     isActive: true,
-    items: [
-      {
-        title: "Clock In/Out",
-        url: "/team/attendance",
-      },
-      {
-        title: "My Timesheet",
-        url: "/team/attendance/timesheet",
-      },
-      {
-        title: "Leave Requests",
-        url: "/team/attendance/leave",
-      },
-      {
-        title: "Schedule",
-        url: "/team/attendance/schedule",
-      },
-    ],
   },
   {
     title: "Team",

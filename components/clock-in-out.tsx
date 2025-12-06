@@ -23,9 +23,19 @@ import { Clock, Play, Square, Coffee, ChevronDown, Utensils, User, MoreHorizonta
 import { cn } from "@/lib/utils";
 import { DateTime } from "luxon";
 import { ShiftReportModal } from "@/components/shift-report-modal";
-import { 
-  useAttendance, 
-  useAttendanceAction, 
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import {
+  useAttendance,
+  useAttendanceAction,
   useSubmitShiftReport,
   type Attendance,
   type Break,
@@ -64,14 +74,25 @@ export function ClockInOut() {
   
   // Local state for timer and UI
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
-  const [currentTime, setCurrentTime] = useState<{ local: string; la: string }>({
+  const [currentTime, setCurrentTime] = useState<{ local: string; la: string; localDate: string; laDate: string }>({
     local: "",
     la: "",
+    localDate: "",
+    laDate: "",
   });
   
   // Shift report modal state
   const [showReportModal, setShowReportModal] = useState(false);
   const [clockedOutAttendance, setClockedOutAttendance] = useState<Attendance | null>(null);
+
+  // Date selection dialog state
+  const [showDateDialog, setShowDateDialog] = useState(false);
+  const [pendingClockOut, setPendingClockOut] = useState(false);
+
+  // Debug log for dialog state changes
+  useEffect(() => {
+    console.log("[DEBUG] showDateDialog changed to:", showDateDialog);
+  }, [showDateDialog]);
 
   // Get user's timezone using Luxon
   const timezone = useMemo(() => {
@@ -81,6 +102,20 @@ export function ClockInOut() {
   // LA timezone
   const laTimezone = "America/Los_Angeles";
 
+  // Check on mount and when attendance changes if there's a clocked out attendance without a shift report
+  useEffect(() => {
+    if (attendance && attendance.status === "CLOCKED_OUT" && !attendance.shiftReport && attendance.clockOut) {
+      // Only show modal if clock out was today
+      const clockOutDate = DateTime.fromISO(attendance.clockOut).setZone(timezone);
+      const today = DateTime.now().setZone(timezone);
+
+      if (clockOutDate.hasSame(today, 'day')) {
+        setClockedOutAttendance(attendance);
+        setShowReportModal(true);
+      }
+    }
+  }, [attendance, timezone]);
+
   // Single synchronized timer for both current time and elapsed time
   useEffect(() => {
     const updateAll = () => {
@@ -88,20 +123,29 @@ export function ClockInOut() {
       
       // Update current time display
       setCurrentTime({
-        local: now.setZone(timezone).toFormat("hh:mm:ss a"),
-        la: now.setZone(laTimezone).toFormat("hh:mm:ss a"),
+        local: now.setZone(timezone).toFormat("h:mm:ss a"),
+        la: now.setZone(laTimezone).toFormat("h:mm:ss a"),
+        localDate: now.setZone(timezone).toFormat("ccc, LLL d"),
+        laDate: now.setZone(laTimezone).toFormat("ccc, LLL d"),
       });
 
-      // Update elapsed time if clocked in
+      // Update elapsed time based on status
       if (attendance) {
         if (attendance.status === "CLOCKED_IN" && attendance.clockIn) {
+          // Show total work time (excluding all breaks)
           const clockInTime = new Date(attendance.clockIn).getTime();
-          const breakTime = attendance.totalBreak * 60; // Convert minutes to seconds
-          setElapsedSeconds(Math.floor((now.toMillis() - clockInTime) / 1000) - breakTime);
-        } else if (attendance.status === "ON_BREAK" && activeBreak) {
+          const totalBreakSeconds = attendance.totalBreak * 60; // Convert minutes to seconds
+          const totalElapsed = Math.floor((now.toMillis() - clockInTime) / 1000);
+          setElapsedSeconds(totalElapsed - totalBreakSeconds);
+        } else if (attendance.status === "ON_BREAK" && activeBreak && activeBreak.startTime) {
+          // Show current break duration only
           const breakStartTime = new Date(activeBreak.startTime).getTime();
           setElapsedSeconds(Math.floor((now.toMillis() - breakStartTime) / 1000));
+        } else {
+          setElapsedSeconds(0);
         }
+      } else {
+        setElapsedSeconds(0);
       }
     };
 
@@ -127,8 +171,61 @@ export function ClockInOut() {
     };
   }, [timezone, attendance, activeBreak]);
 
+  // Check if there are other completed attendance records for the clock-in date (excluding current one)
+  const checkForExistingAttendance = async () => {
+    try {
+      // Use the date from the current attendance's clockIn, not today's date
+      // This handles the case where user clocked in on Day 1 and is clocking out on Day 2
+      if (!attendance?.clockIn) {
+        return false;
+      }
+      
+      const clockInDate = DateTime.fromISO(attendance.clockIn).setZone(timezone).startOf("day").toFormat("yyyy-MM-dd");
+      console.log("[DEBUG] Checking for existing attendance on clock-in date:", clockInDate);
+      console.log("[DEBUG] Current attendance ID:", attendance?.id);
+
+      const response = await fetch(`/api/attendance/history?startDate=${clockInDate}&endDate=${clockInDate}`);
+      const data = await response.json();
+
+      console.log("[DEBUG] API response:", data);
+      console.log("[DEBUG] Attendance records found:", data.attendance);
+
+      // Check if there are any CLOCKED_OUT records for the clock-in date (excluding current attendance)
+      const hasCompletedAttendance = data.attendance?.some(
+        (record: Attendance) => {
+          console.log("[DEBUG] Checking record:", record.id, "status:", record.status, "is current?", record.id === attendance?.id);
+          // Only count CLOCKED_OUT records that are NOT the current attendance
+          return record.status === "CLOCKED_OUT" && record.id !== attendance?.id;
+        }
+      );
+
+      console.log("[DEBUG] Has completed attendance (excluding current):", hasCompletedAttendance);
+      return hasCompletedAttendance;
+    } catch (error) {
+      console.error("Error checking attendance:", error);
+      return false;
+    }
+  };
+
   // Handle clock actions using mutation
-  const handleAction = (action: "clock_in" | "clock_out" | "start_break" | "end_break", breakType?: BreakType) => {
+  const handleAction = async (action: "clock_in" | "clock_out" | "start_break" | "end_break", breakType?: BreakType) => {
+    console.log("[DEBUG] handleAction called with action:", action);
+
+    // Special handling for clock_out - check if we need to ask about the date
+    if (action === "clock_out") {
+      console.log("[DEBUG] Clock out action - checking for existing attendance");
+      const hasExisting = await checkForExistingAttendance();
+      console.log("[DEBUG] hasExisting result:", hasExisting);
+
+      if (hasExisting) {
+        console.log("[DEBUG] Setting showDateDialog to true");
+        setPendingClockOut(true);
+        setShowDateDialog(true);
+        return;
+      }
+      console.log("[DEBUG] No existing attendance, proceeding with clock out");
+    }
+
     attendanceAction.mutate(
       { action, breakType },
       {
@@ -143,20 +240,41 @@ export function ClockInOut() {
     );
   };
 
+  // Execute clock out with selected date
+  const executeClockOut = (useNextDay: boolean) => {
+    setShowDateDialog(false);
+    setPendingClockOut(false);
+
+    attendanceAction.mutate(
+      { action: "clock_out", useNextDay },
+      {
+        onSuccess: (data) => {
+          if (data.attendance) {
+            setClockedOutAttendance(data.attendance);
+            setShowReportModal(true);
+          }
+        },
+      }
+    );
+  };
+
   // Handle shift report submission using mutation
   const handleSubmitReport = async (report: string) => {
     if (!clockedOutAttendance) return;
-    
-    submitShiftReport.mutate({
-      attendanceId: clockedOutAttendance.id,
-      shiftReport: report,
-    });
-  };
 
-  // Handle modal close
-  const handleCloseReportModal = () => {
-    setShowReportModal(false);
-    setClockedOutAttendance(null);
+    submitShiftReport.mutate(
+      {
+        attendanceId: clockedOutAttendance.id,
+        shiftReport: report,
+      },
+      {
+        onSuccess: () => {
+          // Close modal after successful submission
+          setShowReportModal(false);
+          setClockedOutAttendance(null);
+        },
+      }
+    );
   };
 
   // Get break type label
@@ -212,29 +330,33 @@ export function ClockInOut() {
     <TooltipProvider>
       <div className="flex items-center gap-3">
         {/* Time Display */}
-        <div className="hidden md:flex items-center gap-3 text-xs text-muted-foreground">
-          {/* User's Local Time */}
+        <div className="hidden md:flex items-center gap-2 text-xs text-muted-foreground">
+          {/* User's Local Time with Date */}
           <Tooltip>
             <TooltipTrigger asChild>
-              <div className="flex items-center gap-1.5 font-mono">
+              <div className="flex items-center gap-1 font-mono">
                 <Clock className="h-3 w-3" />
+                <span>{currentTime.localDate}</span>
+                <span className="text-muted-foreground/50">•</span>
                 <span>{currentTime.local}</span>
-                <span className="text-[10px] opacity-70">{getTimezoneLabel(timezone)}</span>
+                <span className="text-[10px] opacity-60">{getTimezoneLabel(timezone)}</span>
               </div>
             </TooltipTrigger>
             <TooltipContent>Your local time ({timezone})</TooltipContent>
           </Tooltip>
 
-          {/* LA Time - only show if user is not in LA */}
+          {/* LA Time with Date - only show if user is not in LA */}
           {!isInLA && (
             <>
-              <span className="text-muted-foreground/50">|</span>
+              <span className="text-muted-foreground/30">|</span>
               <Tooltip>
                 <TooltipTrigger asChild>
-                  <div className="flex items-center gap-1.5 font-mono">
+                  <div className="flex items-center gap-1 font-mono">
                     <Globe className="h-3 w-3" />
+                    <span>{currentTime.laDate}</span>
+                    <span className="text-muted-foreground/50">•</span>
                     <span>{currentTime.la}</span>
-                    <span className="text-[10px] opacity-70">{getTimezoneLabel(laTimezone)}</span>
+                    <span className="text-[10px] opacity-60">{getTimezoneLabel(laTimezone)}</span>
                   </div>
                 </TooltipTrigger>
                 <TooltipContent>Los Angeles time (HQ)</TooltipContent>
@@ -369,15 +491,42 @@ export function ClockInOut() {
           </DropdownMenu>
         )}
 
-        {/* Shift Report Modal */}
+        {/* Shift Report Modal - Required, no close button */}
         <ShiftReportModal
           isOpen={showReportModal}
-          onClose={handleCloseReportModal}
           onSubmit={handleSubmitReport}
           clockOutTime={clockedOutAttendance?.clockOut || undefined}
-          duration={clockedOutAttendance?.duration || undefined}
+          totalHours={clockedOutAttendance?.totalHours || undefined}
+          totalBreak={clockedOutAttendance?.totalBreak}
           timezone={laTimezone}
+          isSubmitting={submitShiftReport.isPending}
         />
+
+        {/* Date Selection Dialog */}
+        <AlertDialog open={showDateDialog} onOpenChange={setShowDateDialog}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Choose Date for This Shift</AlertDialogTitle>
+              <AlertDialogDescription>
+                You already have a completed shift for {attendance?.clockIn ? DateTime.fromISO(attendance.clockIn).setZone(timezone).toFormat("MMM dd") : "this date"}. Would you like to assign this shift to the same date (creating multiple shifts) or to the next day?
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter className="flex-col sm:flex-row gap-2">
+              <AlertDialogAction
+                onClick={() => executeClockOut(false)}
+                className="bg-primary"
+              >
+                Keep Same Date ({attendance?.clockIn ? DateTime.fromISO(attendance.clockIn).setZone(timezone).toFormat("MMM dd") : "Today"})
+              </AlertDialogAction>
+              <AlertDialogAction
+                onClick={() => executeClockOut(true)}
+                className="bg-secondary text-secondary-foreground hover:bg-secondary/80"
+              >
+                Assign to Next Day ({attendance?.clockIn ? DateTime.fromISO(attendance.clockIn).setZone(timezone).plus({ days: 1 }).toFormat("MMM dd") : "Tomorrow"})
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
       </div>
     </TooltipProvider>
   );

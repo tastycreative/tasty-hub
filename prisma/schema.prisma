@@ -99,7 +99,8 @@ model Attendance {
   clockIn      DateTime?        @map("clock_in") @db.Timestamptz // Timezone-aware timestamp
   clockOut     DateTime?        @map("clock_out") @db.Timestamptz // Timezone-aware timestamp
   totalBreak   Int              @default(0) @map("total_break") // Total break time in minutes (sum of all breaks)
-  duration     Int?             // Total work duration in minutes (calculated on clock out)
+  duration     Int?             // Total elapsed time in minutes (clock out - clock in, NOT subtracting breaks)
+  totalHours   Float?           @map("total_hours") // Net work hours (duration - breaks), calculated on clock out
   status       AttendanceStatus @default(CLOCKED_OUT)
   notes        String?
   // Shift report fields (markdown support)
@@ -112,9 +113,9 @@ model Attendance {
   user         User             @relation(fields: [userId], references: [id], onDelete: Cascade)
   breaks       Break[]          // Multiple breaks per attendance
 
-  // Unique constraint: one attendance record per user per day
-  @@unique([userId, date])
+  // Index for querying attendance by user and date (allows multiple records per day)
   @@index([userId, date])
+  @@index([userId, status])
   @@map("attendance")
 }
 

@@ -6,11 +6,33 @@ import { DateTime } from "luxon";
 // Break types matching the Prisma enum
 type BreakType = "SHORT" | "LUNCH" | "PERSONAL" | "OTHER";
 
-// Get today's date at midnight for a specific timezone
+// Break interface for type safety
+interface BreakRecord {
+  id: string;
+  attendanceId: string;
+  startTime: Date;
+  endTime: Date | null;
+  duration: number | null;
+  type: BreakType;
+  notes: string | null;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+// Get today's date for a specific timezone
+// This returns a Date object representing the LOCAL date (not UTC midnight)
+// For example, Dec 4 in PHT will be stored as Dec 4, regardless of UTC offset
 function getTodayDate(timezone: string) {
   const now = DateTime.now().setZone(timezone);
-  // Return as a Date object at midnight UTC for that local date
-  return now.startOf("day").toUTC().toJSDate();
+  // Create a date using the local date components
+  // This ensures Dec 4 in PHT is stored as Dec 4, not Dec 3
+  const year = now.year;
+  const month = now.month;
+  const day = now.day;
+  
+  // Create a UTC date with the local date values (treating them as UTC)
+  // This way, Dec 4 in any timezone is stored as Dec 4 00:00:00 UTC
+  return new Date(Date.UTC(year, month - 1, day, 0, 0, 0, 0));
 }
 
 // GET - Get current attendance status for the logged-in user
@@ -38,12 +60,13 @@ export async function GET(request: NextRequest) {
 
     const today = getTodayDate(timezone);
 
-    // Get today's attendance record with breaks
-    const attendance = await prisma.attendance.findUnique({
+    // PRIORITY 1: Check for any ACTIVE attendance (CLOCKED_IN or ON_BREAK) regardless of date
+    // This ensures the timer continues even after midnight
+    const activeAttendance = await prisma.attendance.findFirst({
       where: {
-        userId_date: {
-          userId: dbUser.id,
-          date: today,
+        userId: dbUser.id,
+        status: {
+          in: ["CLOCKED_IN", "ON_BREAK"],
         },
       },
       include: {
@@ -51,10 +74,29 @@ export async function GET(request: NextRequest) {
           orderBy: { startTime: "desc" },
         },
       },
+      orderBy: {
+        createdAt: "desc",
+      },
+    });
+
+    // PRIORITY 2: If no active attendance, get the most recent one for TODAY (even if CLOCKED_OUT)
+    const attendance = activeAttendance || await prisma.attendance.findFirst({
+      where: {
+        userId: dbUser.id,
+        date: today,
+      },
+      include: {
+        breaks: {
+          orderBy: { startTime: "desc" },
+        },
+      },
+      orderBy: {
+        createdAt: "desc",
+      },
     });
 
     // Check if there's an active break (no endTime)
-    const activeBreak = attendance?.breaks.find((b) => !b.endTime);
+    const activeBreak = attendance?.breaks.find((b: BreakRecord) => !b.endTime);
 
     // Get current server time in user's timezone
     const serverTime = DateTime.now().setZone(timezone).toISO();
@@ -91,7 +133,7 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json();
-    const { action, timezone: bodyTimezone, breakType } = body;
+    const { action, timezone: bodyTimezone, breakType, useNextDay } = body;
 
     // Get timezone from body, header, or default to UTC
     const timezone =
@@ -99,16 +141,23 @@ export async function POST(request: NextRequest) {
       request.headers.get("x-timezone") ||
       "UTC";
 
+    // Determine the date to use (today or next day)
+    const targetDate = useNextDay
+      ? getTodayDate(timezone).getTime() + (24 * 60 * 60 * 1000) // Add 1 day in milliseconds
+      : getTodayDate(timezone).getTime();
+    const date = new Date(targetDate);
+
     const today = getTodayDate(timezone);
     const now = DateTime.now().setZone(timezone);
     const nowJS = now.toJSDate();
 
-    // Get or create today's attendance record with breaks
-    let attendance = await prisma.attendance.findUnique({
+    // Find the most recent active attendance record (regardless of date)
+    // This ensures actions like start_break, end_break, clock_out work even after midnight
+    let attendance = await prisma.attendance.findFirst({
       where: {
-        userId_date: {
-          userId: dbUser.id,
-          date: today,
+        userId: dbUser.id,
+        status: {
+          in: ["CLOCKED_IN", "ON_BREAK"],
         },
       },
       include: {
@@ -116,10 +165,13 @@ export async function POST(request: NextRequest) {
           orderBy: { startTime: "desc" },
         },
       },
+      orderBy: {
+        createdAt: "desc",
+      },
     });
 
     // Find active break (no endTime)
-    const activeBreak = attendance?.breaks.find((b) => !b.endTime);
+    const activeBreak = attendance?.breaks.find((b: BreakRecord) => !b.endTime);
 
     switch (action) {
       case "clock_in": {
@@ -130,25 +182,13 @@ export async function POST(request: NextRequest) {
           );
         }
 
-        attendance = await prisma.attendance.upsert({
-          where: {
-            userId_date: {
-              userId: dbUser.id,
-              date: today,
-            },
-          },
-          create: {
+        // Create a new attendance record (allows multiple per day)
+        attendance = await prisma.attendance.create({
+          data: {
             userId: dbUser.id,
             date: today,
             timezone: timezone,
             clockIn: nowJS,
-            status: "CLOCKED_IN",
-          },
-          update: {
-            clockIn: nowJS,
-            clockOut: null,
-            duration: null,
-            totalBreak: 0,
             status: "CLOCKED_IN",
           },
           include: {
@@ -170,7 +210,7 @@ export async function POST(request: NextRequest) {
         if (activeBreak) {
           const breakStart = DateTime.fromJSDate(activeBreak.startTime);
           const breakDuration = Math.round(now.diff(breakStart, "minutes").minutes);
-          
+
           await prisma.break.update({
             where: { id: activeBreak.id },
             data: {
@@ -178,7 +218,7 @@ export async function POST(request: NextRequest) {
               duration: breakDuration,
             },
           });
-          
+
           // Update total break time
           attendance = await prisma.attendance.update({
             where: { id: attendance.id },
@@ -192,12 +232,22 @@ export async function POST(request: NextRequest) {
         // Calculate duration in minutes using Luxon
         const clockInTime = DateTime.fromJSDate(attendance.clockIn!);
         const duration = Math.round(now.diff(clockInTime, "minutes").minutes);
+        
+        // Calculate net work minutes (duration minus breaks)
+        const netWorkMinutes = duration - (attendance.totalBreak || 0);
+        
+        // Calculate total hours as a decimal (e.g., 8.5 for 8 hours 30 minutes)
+        const totalHours = parseFloat((netWorkMinutes / 60).toFixed(2));
 
+        // Update attendance with clock out
+        // If useNextDay is true, also update the date field
         attendance = await prisma.attendance.update({
           where: { id: attendance.id },
           data: {
+            ...(useNextDay ? { date } : {}), // Update date to next day if requested
             clockOut: nowJS,
-            duration: duration - (attendance.totalBreak || 0),
+            duration: duration, // Store total elapsed time (not subtracting breaks)
+            totalHours: totalHours, // Store net work hours (duration - breaks)
             status: "CLOCKED_OUT",
           },
           include: {
@@ -289,7 +339,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Get the new active break if any
-    const newActiveBreak = attendance?.breaks.find((b) => !b.endTime);
+    const newActiveBreak = attendance?.breaks.find((b: BreakRecord) => !b.endTime);
 
     return NextResponse.json({
       attendance,
