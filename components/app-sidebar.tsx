@@ -596,7 +596,7 @@ export function AppSidebar({ ...props }: AppSidebarProps) {
                     Management Platform
                   </span>
                 </div>
-                <div className="group-data-[collapsible=icon]:hidden">
+                <div className="group-data-[collapsible=icon]:hidden" onClick={(e) => e.preventDefault()}>
                   <ThemeToggle />
                 </div>
               </Link>
