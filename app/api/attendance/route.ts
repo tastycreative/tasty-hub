@@ -133,19 +133,13 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json();
-    const { action, timezone: bodyTimezone, breakType, useNextDay } = body;
+    const { action, timezone: bodyTimezone, breakType } = body;
 
     // Get timezone from body, header, or default to UTC
     const timezone =
       bodyTimezone ||
       request.headers.get("x-timezone") ||
       "UTC";
-
-    // Determine the date to use (today or next day)
-    const targetDate = useNextDay
-      ? getTodayDate(timezone).getTime() + (24 * 60 * 60 * 1000) // Add 1 day in milliseconds
-      : getTodayDate(timezone).getTime();
-    const date = new Date(targetDate);
 
     const today = getTodayDate(timezone);
     const now = DateTime.now().setZone(timezone);
@@ -240,11 +234,10 @@ export async function POST(request: NextRequest) {
         const totalHours = parseFloat((netWorkMinutes / 60).toFixed(2));
 
         // Update attendance with clock out
-        // If useNextDay is true, also update the date field
+        // Note: The date field is NOT updated - it always represents the clock-in date
         attendance = await prisma.attendance.update({
           where: { id: attendance.id },
           data: {
-            ...(useNextDay ? { date } : {}), // Update date to next day if requested
             clockOut: nowJS,
             duration: duration, // Store total elapsed time (not subtracting breaks)
             totalHours: totalHours, // Store net work hours (duration - breaks)

@@ -71,7 +71,6 @@ type AttendanceAction = "clock_in" | "clock_out" | "start_break" | "end_break";
 interface AttendanceActionParams {
   action: AttendanceAction;
   breakType?: BreakType;
-  useNextDay?: boolean; // For clock_out: assign to next day instead of today
 }
 
 // Mutation for clock actions with optimistic updates
@@ -80,14 +79,14 @@ export function useAttendanceAction() {
   const timezone = getUserTimezone();
 
   return useMutation({
-    mutationFn: async ({ action, breakType, useNextDay }: AttendanceActionParams) => {
+    mutationFn: async ({ action, breakType }: AttendanceActionParams) => {
       const response = await fetch("/api/attendance", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
           "x-timezone": timezone,
         },
-        body: JSON.stringify({ action, timezone, breakType, useNextDay }),
+        body: JSON.stringify({ action, timezone, breakType }),
       });
 
       if (!response.ok) {

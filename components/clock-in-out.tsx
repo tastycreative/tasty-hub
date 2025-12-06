@@ -89,10 +89,6 @@ export function ClockInOut() {
   const [showDateDialog, setShowDateDialog] = useState(false);
   const [pendingClockOut, setPendingClockOut] = useState(false);
 
-  // Debug log for dialog state changes
-  useEffect(() => {
-    console.log("[DEBUG] showDateDialog changed to:", showDateDialog);
-  }, [showDateDialog]);
 
   // Get user's timezone using Luxon
   const timezone = useMemo(() => {
@@ -179,27 +175,19 @@ export function ClockInOut() {
       if (!attendance?.clockIn) {
         return false;
       }
-      
-      const clockInDate = DateTime.fromISO(attendance.clockIn).setZone(timezone).startOf("day").toFormat("yyyy-MM-dd");
-      console.log("[DEBUG] Checking for existing attendance on clock-in date:", clockInDate);
-      console.log("[DEBUG] Current attendance ID:", attendance?.id);
 
+      const clockInDate = DateTime.fromISO(attendance.clockIn).setZone(timezone).startOf("day").toFormat("yyyy-MM-dd");
       const response = await fetch(`/api/attendance/history?startDate=${clockInDate}&endDate=${clockInDate}`);
       const data = await response.json();
-
-      console.log("[DEBUG] API response:", data);
-      console.log("[DEBUG] Attendance records found:", data.attendance);
 
       // Check if there are any CLOCKED_OUT records for the clock-in date (excluding current attendance)
       const hasCompletedAttendance = data.attendance?.some(
         (record: Attendance) => {
-          console.log("[DEBUG] Checking record:", record.id, "status:", record.status, "is current?", record.id === attendance?.id);
           // Only count CLOCKED_OUT records that are NOT the current attendance
           return record.status === "CLOCKED_OUT" && record.id !== attendance?.id;
         }
       );
 
-      console.log("[DEBUG] Has completed attendance (excluding current):", hasCompletedAttendance);
       return hasCompletedAttendance;
     } catch (error) {
       console.error("Error checking attendance:", error);
@@ -209,21 +197,16 @@ export function ClockInOut() {
 
   // Handle clock actions using mutation
   const handleAction = async (action: "clock_in" | "clock_out" | "start_break" | "end_break", breakType?: BreakType) => {
-    console.log("[DEBUG] handleAction called with action:", action);
-
-    // Special handling for clock_out - check if we need to ask about the date
+    // Special handling for clock_out - check if we need to warn about multiple shifts
     if (action === "clock_out") {
-      console.log("[DEBUG] Clock out action - checking for existing attendance");
       const hasExisting = await checkForExistingAttendance();
-      console.log("[DEBUG] hasExisting result:", hasExisting);
 
       if (hasExisting) {
-        console.log("[DEBUG] Setting showDateDialog to true");
+        // Show dialog to confirm creating multiple shifts on the same date
         setPendingClockOut(true);
         setShowDateDialog(true);
         return;
       }
-      console.log("[DEBUG] No existing attendance, proceeding with clock out");
     }
 
     attendanceAction.mutate(
@@ -240,13 +223,13 @@ export function ClockInOut() {
     );
   };
 
-  // Execute clock out with selected date
-  const executeClockOut = (useNextDay: boolean) => {
+  // Execute clock out (after confirming multiple shifts)
+  const executeClockOut = () => {
     setShowDateDialog(false);
     setPendingClockOut(false);
 
     attendanceAction.mutate(
-      { action: "clock_out", useNextDay },
+      { action: "clock_out" },
       {
         onSuccess: (data) => {
           if (data.attendance) {
@@ -502,27 +485,26 @@ export function ClockInOut() {
           isSubmitting={submitShiftReport.isPending}
         />
 
-        {/* Date Selection Dialog */}
+        {/* Date Selection Dialog - DEPRECATED, will be removed */}
+        {/* The date field always represents the clock-in date, not clock-out date */}
         <AlertDialog open={showDateDialog} onOpenChange={setShowDateDialog}>
           <AlertDialogContent>
             <AlertDialogHeader>
-              <AlertDialogTitle>Choose Date for This Shift</AlertDialogTitle>
+              <AlertDialogTitle>Multiple Shifts Detected</AlertDialogTitle>
               <AlertDialogDescription>
-                You already have a completed shift for {attendance?.clockIn ? DateTime.fromISO(attendance.clockIn).setZone(timezone).toFormat("MMM dd") : "this date"}. Would you like to assign this shift to the same date (creating multiple shifts) or to the next day?
+                You already have a completed shift for {attendance?.clockIn ? DateTime.fromISO(attendance.clockIn).setZone(timezone).toFormat("MMM dd") : "this date"}.
+                This will create a second shift record for the same date.
               </AlertDialogDescription>
             </AlertDialogHeader>
             <AlertDialogFooter className="flex-col sm:flex-row gap-2">
+              <AlertDialogCancel onClick={() => setShowDateDialog(false)}>
+                Cancel
+              </AlertDialogCancel>
               <AlertDialogAction
-                onClick={() => executeClockOut(false)}
+                onClick={executeClockOut}
                 className="bg-primary"
               >
-                Keep Same Date ({attendance?.clockIn ? DateTime.fromISO(attendance.clockIn).setZone(timezone).toFormat("MMM dd") : "Today"})
-              </AlertDialogAction>
-              <AlertDialogAction
-                onClick={() => executeClockOut(true)}
-                className="bg-secondary text-secondary-foreground hover:bg-secondary/80"
-              >
-                Assign to Next Day ({attendance?.clockIn ? DateTime.fromISO(attendance.clockIn).setZone(timezone).plus({ days: 1 }).toFormat("MMM dd") : "Tomorrow"})
+                Continue Clock Out
               </AlertDialogAction>
             </AlertDialogFooter>
           </AlertDialogContent>
