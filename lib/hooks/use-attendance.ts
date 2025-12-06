@@ -112,6 +112,7 @@ export function useAttendanceAction() {
           case "clock_in":
             optimisticData.attendance = {
               id: previousData.attendance?.id || "temp",
+              date: DateTime.now().setZone(timezone).toFormat("yyyy-MM-dd"),
               clockIn: now,
               clockOut: null,
               status: "CLOCKED_IN",
