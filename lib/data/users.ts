@@ -132,6 +132,54 @@ export async function getUserStats(): Promise<UserStats> {
   }
 }
 
+// Server-side function to fetch users excluding viewer-only users (for HR)
+export async function getUsersExcludingViewerOnly(): Promise<User[]> {
+  try {
+    const users = await prisma.user.findMany({
+      include: {
+        userTeams: {
+          include: {
+            team: true,
+          },
+        },
+      },
+      orderBy: {
+        createdAt: "desc",
+      },
+    });
+
+    // Transform and filter out users who only have VIEWER role
+    return (users as UserWithTeams[])
+      .filter((user) => {
+        const roles = user.userTeams.map((ut) => ut.role);
+        // Exclude users who only have VIEWER roles (no MEMBER, ADMIN, or OWNER)
+        return roles.some((role) => role !== "VIEWER");
+      })
+      .map((user) => {
+        const roles = user.userTeams.map((ut) => ut.role);
+        return {
+          id: user.id,
+          stackAuthId: user.stackAuthId,
+          name: user.displayName || user.email.split("@")[0],
+          email: user.email,
+          avatarUrl: user.avatarUrl,
+          createdAt: user.createdAt,
+          updatedAt: user.updatedAt,
+          role: getHighestRole(roles),
+          teams: user.userTeams.map((ut) => ({
+            id: ut.team.id,
+            name: ut.team.name,
+            role: ut.role,
+          })),
+          status: "Active",
+        };
+      });
+  } catch (error) {
+    console.error("Error fetching users (excluding viewer-only):", error);
+    return [];
+  }
+}
+
 // Helper to get highest role
 function getHighestRole(roles: string[]): string {
   const roleOrder = ["OWNER", "ADMIN", "MEMBER", "VIEWER"];
