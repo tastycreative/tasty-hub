@@ -23,10 +23,10 @@ export function UsersHeader({
         <h1 className="text-2xl font-bold tracking-tight">{title}</h1>
         <p className="text-muted-foreground">{description}</p>
       </div>
-      <Button onClick={handleAddUser}>
+      {/* <Button onClick={handleAddUser}>
         <UserPlus className="mr-2 h-4 w-4" />
         Add User
-      </Button>
+      </Button> */}
     </div>
   );
 }
