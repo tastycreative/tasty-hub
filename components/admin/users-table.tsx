@@ -12,10 +12,13 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { MoreHorizontal, Pencil, Trash2, UserCog } from "lucide-react";
+import { MoreHorizontal, Pencil, Trash2, UserCog, Eye } from "lucide-react";
 import { RoleBadge } from "./role-badge";
 import { StatusBadge } from "./status-badge";
 import { ManageRolesDialog } from "./manage-roles-dialog";
+import { EditUserDialog } from "./edit-user-dialog";
+import { DeleteUserDialog } from "./delete-user-dialog";
+import { useUpdateUserRole } from "@/lib/hooks/use-users";
 
 interface UsersTableProps {
   users: User[];
@@ -24,6 +27,8 @@ interface UsersTableProps {
 export function UsersTable({ users }: UsersTableProps) {
   const [selectedUser, setSelectedUser] = useState<User | null>(null);
   const [rolesDialogOpen, setRolesDialogOpen] = useState(false);
+  const [editDialogOpen, setEditDialogOpen] = useState(false);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const router = useRouter();
 
   const handleManageRoles = (user: User) => {
@@ -31,7 +36,17 @@ export function UsersTable({ users }: UsersTableProps) {
     setRolesDialogOpen(true);
   };
 
-  const handleRolesSuccess = () => {
+  const handleEdit = (user: User) => {
+    setSelectedUser(user);
+    setEditDialogOpen(true);
+  };
+
+  const handleDelete = (user: User) => {
+    setSelectedUser(user);
+    setDeleteDialogOpen(true);
+  };
+
+  const handleSuccess = () => {
     // Refresh the page data
     router.refresh();
   };
@@ -79,7 +94,12 @@ export function UsersTable({ users }: UsersTableProps) {
                         <StatusBadge status={user.status} />
                       </td>
                       <td className="p-3">
-                        <UserActions user={user} onManageRoles={handleManageRoles} />
+                        <UserActions
+                          user={user}
+                          onManageRoles={handleManageRoles}
+                          onEdit={handleEdit}
+                          onDelete={handleDelete}
+                        />
                       </td>
                     </tr>
                   ))
@@ -100,7 +120,21 @@ export function UsersTable({ users }: UsersTableProps) {
         user={selectedUser}
         open={rolesDialogOpen}
         onOpenChange={setRolesDialogOpen}
-        onSuccess={handleRolesSuccess}
+        onSuccess={handleSuccess}
+      />
+
+      <EditUserDialog
+        user={selectedUser}
+        open={editDialogOpen}
+        onOpenChange={setEditDialogOpen}
+        onSuccess={handleSuccess}
+      />
+
+      <DeleteUserDialog
+        user={selectedUser}
+        open={deleteDialogOpen}
+        onOpenChange={setDeleteDialogOpen}
+        onSuccess={handleSuccess}
       />
     </>
   );
@@ -156,18 +190,31 @@ function TeamsList({ teams }: { teams: User["teams"] }) {
 function UserActions({
   user,
   onManageRoles,
+  onEdit,
+  onDelete,
 }: {
   user: User;
   onManageRoles: (user: User) => void;
+  onEdit: (user: User) => void;
+  onDelete: (user: User) => void;
 }) {
-  const handleEdit = () => {
-    console.log("Edit user:", user.id);
-    // TODO: Implement edit modal
-  };
+  const router = useRouter();
+  const updateUserRole = useUpdateUserRole();
 
-  const handleDelete = () => {
-    console.log("Delete user:", user.id);
-    // TODO: Implement delete confirmation
+  const handleChangeToViewer = async () => {
+    // Change all user's team roles to VIEWER
+    try {
+      for (const team of user.teams) {
+        await updateUserRole.mutateAsync({
+          userId: user.id,
+          teamId: team.id,
+          role: "VIEWER",
+        });
+      }
+      router.refresh();
+    } catch (error) {
+      console.error("Failed to change user to viewer:", error);
+    }
   };
 
   return (
@@ -181,18 +228,28 @@ function UserActions({
       <DropdownMenuContent align="end">
         <DropdownMenuLabel>Actions</DropdownMenuLabel>
         <DropdownMenuSeparator />
-        <DropdownMenuItem onClick={handleEdit}>
+        <DropdownMenuItem onClick={() => onEdit(user)}>
           <Pencil className="mr-2 h-4 w-4" />
-          Edit
+          Edit User
         </DropdownMenuItem>
         <DropdownMenuItem onClick={() => onManageRoles(user)}>
           <UserCog className="mr-2 h-4 w-4" />
           Manage Roles
         </DropdownMenuItem>
+        <DropdownMenuItem
+          onClick={handleChangeToViewer}
+          disabled={updateUserRole.isPending || user.role === "VIEWER"}
+        >
+          <Eye className="mr-2 h-4 w-4" />
+          Change to Viewer
+        </DropdownMenuItem>
         <DropdownMenuSeparator />
-        <DropdownMenuItem onClick={handleDelete} className="text-destructive">
+        <DropdownMenuItem
+          onClick={() => onDelete(user)}
+          className="text-destructive focus:text-destructive"
+        >
           <Trash2 className="mr-2 h-4 w-4" />
-          Delete
+          Delete User
         </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>
