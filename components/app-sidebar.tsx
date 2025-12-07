@@ -20,6 +20,7 @@ import {
   Briefcase,
   CalendarDays,
   UserCog,
+  Eye,
 } from "lucide-react";
 
 import { NavMain } from "@/components/nav-main";
@@ -325,10 +326,11 @@ const hrDocs = [
 ];
 
 // Navigation config for Normal Team (e.g., AI Content Team)
-const normalNavMain = [
+// Function to generate team nav with dynamic slug
+const getNormalNavMain = (slug: string) => [
   {
     title: "My Timesheet",
-    url: "/team/timesheet",
+    url: `/team/${slug}/timesheet`,
     icon: Clock,
     isActive: true,
   },
@@ -339,15 +341,15 @@ const normalNavMain = [
     items: [
       {
         title: "Members",
-        url: "/team/members",
+        url: `/team/${slug}/members`,
       },
       {
         title: "Directory",
-        url: "/team/directory",
+        url: `/team/${slug}/directory`,
       },
       {
         title: "Calendar",
-        url: "/team/calendar",
+        url: `/team/${slug}/calendar`,
       },
     ],
   },
@@ -358,35 +360,62 @@ const normalNavMain = [
     items: [
       {
         title: "Profile",
-        url: "/team/profile",
+        url: `/team/${slug}/profile`,
       },
       {
         title: "My Documents",
-        url: "/team/profile/documents",
+        url: `/team/${slug}/profile/documents`,
       },
       {
         title: "Settings",
-        url: "/team/profile/settings",
+        url: `/team/${slug}/profile/settings`,
       },
     ],
   },
 ];
 
-const normalDocs = [
+const getNormalDocs = (slug: string) => [
   {
     name: "Documents",
-    url: "/team/docs",
+    url: `/team/${slug}/docs`,
     icon: FileText,
   },
   {
     name: "Resources",
-    url: "/team/docs/resources",
+    url: `/team/${slug}/docs/resources`,
     icon: FolderOpen,
   },
   {
     name: "Meeting Notes",
-    url: "/team/docs/meetings",
+    url: `/team/${slug}/docs/meetings`,
     icon: CalendarDays,
+  },
+];
+
+// Navigation config for Viewer (pending access)
+const viewerNavMain = [
+  {
+    title: "My Profile",
+    url: "#",
+    icon: UserCog,
+    items: [
+      {
+        title: "Profile",
+        url: "/viewer/profile",
+      },
+      {
+        title: "Settings",
+        url: "/viewer/profile/settings",
+      },
+    ],
+  },
+];
+
+const viewerDocs = [
+  {
+    name: "Getting Started",
+    url: "/viewer/docs/getting-started",
+    icon: FileText,
   },
 ];
 
@@ -394,19 +423,22 @@ const normalDocs = [
 const teamIcons: Record<string, React.ElementType> = {
   admin: Shield,
   hr: Users,
+  viewer: Eye,
   "ai-content": Sparkles,
 };
 
 // Function to get navigation based on team type
-function getNavigationForTeam(teamType: TeamType) {
+function getNavigationForTeam(teamType: TeamType, slug: string) {
   switch (teamType) {
     case "admin":
       return { navMain: adminNavMain, docs: adminDocs };
     case "hr":
       return { navMain: hrNavMain, docs: hrDocs };
+    case "viewer":
+      return { navMain: viewerNavMain, docs: viewerDocs };
     case "team":
     default:
-      return { navMain: normalNavMain, docs: normalDocs };
+      return { navMain: getNormalNavMain(slug), docs: getNormalDocs(slug) };
   }
 }
 
@@ -421,14 +453,16 @@ function getTeamsWithIcons(teams: TeamData[]) {
 interface AppSidebarProps extends React.ComponentProps<typeof Sidebar> {}
 
 // Helper to get dashboard URL for team type
-function getTeamDashboardUrl(teamType: TeamType): string {
+function getTeamDashboardUrl(teamType: TeamType, slug: string): string {
   switch (teamType) {
     case "admin":
       return "/admin";
     case "hr":
       return "/hr";
+    case "viewer":
+      return "/viewer";
     case "team":
-      return "/team";
+      return `/team/${slug}`;
     default:
       return "/admin";
   }
@@ -446,25 +480,35 @@ export function AppSidebar({ ...props }: AppSidebarProps) {
   }, []);
 
   // Fetch teams from API
-  React.useEffect(() => {
-    async function fetchTeams() {
-      try {
-        const response = await fetch("/api/teams");
-        if (response.ok) {
-          const dbTeams = await response.json();
-          if (dbTeams.length > 0) {
-            const teamData = dbTeams.map((t: { id: string; name: string; slug: string; logo?: string | null; plan?: string }) => toTeamData(t));
-            setTeams(teamData);
-          }
+  const fetchTeams = React.useCallback(async () => {
+    try {
+      const response = await fetch("/api/teams/my");
+      if (response.ok) {
+        const dbTeams = await response.json();
+        if (dbTeams.length > 0) {
+          const teamData = dbTeams.map((t: { id: string; name: string; slug: string; logo?: string | null; plan?: string; role?: string }) => toTeamData(t));
+          setTeams(teamData);
+        } else {
+          // No teams - create a viewer placeholder team
+          const viewerTeam: TeamData = {
+            id: "viewer",
+            name: "Pending Access",
+            slug: "viewer",
+            type: "viewer",
+          };
+          setTeams([viewerTeam]);
         }
-      } catch (error) {
-        console.error("Error fetching teams:", error);
-      } finally {
-        setIsLoading(false);
       }
+    } catch (error) {
+      console.error("Error fetching teams:", error);
+    } finally {
+      setIsLoading(false);
     }
-    fetchTeams();
   }, [setTeams]);
+
+  React.useEffect(() => {
+    fetchTeams();
+  }, [fetchTeams]);
 
   // Get teams with icons
   const teams = React.useMemo(() => getTeamsWithIcons(storeTeams), [storeTeams]);
@@ -479,8 +523,8 @@ export function AppSidebar({ ...props }: AppSidebarProps) {
 
   // Get navigation based on active team type
   const { navMain, docs } = React.useMemo(
-    () => getNavigationForTeam(selectedTeam.type),
-    [selectedTeam.type]
+    () => getNavigationForTeam(selectedTeam.type, selectedTeam.slug),
+    [selectedTeam.type, selectedTeam.slug]
   );
 
   // Handle team change - update store and redirect to team dashboard
@@ -490,7 +534,7 @@ export function AppSidebar({ ...props }: AppSidebarProps) {
       if (storeTeam) {
         setSelectedTeam(storeTeam);
         // Redirect to the team's dashboard
-        router.push(getTeamDashboardUrl(storeTeam.type));
+        router.push(getTeamDashboardUrl(storeTeam.type, storeTeam.slug));
       }
     },
     [storeTeams, setSelectedTeam, router]
@@ -607,6 +651,7 @@ export function AppSidebar({ ...props }: AppSidebarProps) {
           teams={teams}
           activeTeam={activeTeam}
           onTeamChange={handleTeamChange}
+          onRefetchTeams={fetchTeams}
         />
       </SidebarHeader>
       <SidebarContent>

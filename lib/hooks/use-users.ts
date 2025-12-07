@@ -124,3 +124,95 @@ export function useDeleteUser() {
     },
   });
 }
+
+// Hook to update user role in a team
+export function useUpdateUserRole() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({
+      userId,
+      teamId,
+      role,
+    }: {
+      userId: string;
+      teamId: string;
+      role: string;
+    }) => {
+      const response = await fetch(`/api/users/${userId}/roles`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ teamId, role }),
+      });
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || "Failed to update role");
+      }
+      return response.json();
+    },
+    onSuccess: (_, variables) => {
+      queryClient.invalidateQueries({ queryKey: ["users"] });
+      queryClient.invalidateQueries({ queryKey: ["users", variables.userId] });
+    },
+  });
+}
+
+// Hook to add user to team
+export function useAddUserToTeam() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({
+      userId,
+      teamId,
+      role,
+    }: {
+      userId: string;
+      teamId: string;
+      role: string;
+    }) => {
+      const response = await fetch(`/api/users/${userId}/roles`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ teamId, role }),
+      });
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || "Failed to add to team");
+      }
+      return response.json();
+    },
+    onSuccess: (_, variables) => {
+      queryClient.invalidateQueries({ queryKey: ["users"] });
+      queryClient.invalidateQueries({ queryKey: ["users", variables.userId] });
+    },
+  });
+}
+
+// Hook to remove user from team
+export function useRemoveUserFromTeam() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({
+      userId,
+      teamId,
+    }: {
+      userId: string;
+      teamId: string;
+    }) => {
+      const response = await fetch(`/api/users/${userId}/roles?teamId=${teamId}`, {
+        method: "DELETE",
+      });
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || "Failed to remove from team");
+      }
+      return response.json();
+    },
+    onSuccess: (_, variables) => {
+      queryClient.invalidateQueries({ queryKey: ["users"] });
+      queryClient.invalidateQueries({ queryKey: ["users", variables.userId] });
+    },
+  });
+}

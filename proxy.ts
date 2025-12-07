@@ -14,48 +14,53 @@ const SHARED_ROUTES = ["/dashboard", "/profile", "/settings"];
 export function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
-  // Get the selected team from cookie
+  // Get the selected team slug from cookie
   const selectedTeamCookie = request.cookies.get("selected-team");
-  const selectedTeam = selectedTeamCookie?.value || "admin"; // Default to admin
+  const selectedTeamSlug = selectedTeamCookie?.value;
 
   // Check if the current path is a team-specific route
   const isAdminRoute = pathname.startsWith("/admin");
   const isHrRoute = pathname.startsWith("/hr");
-  const isTeamRoute = pathname.startsWith("/team");
+  const isViewerRoute = pathname.startsWith("/viewer");
 
-  // Determine required team for current route
-  let requiredTeam: string | null = null;
-  if (isAdminRoute) requiredTeam = "admin";
-  if (isHrRoute) requiredTeam = "hr";
-  if (isTeamRoute) requiredTeam = "team";
-
-  // If accessing a team-specific route with wrong team selected
-  if (requiredTeam && requiredTeam !== selectedTeam) {
-    // Redirect to the dashboard of the selected team
-    const redirectUrl = getTeamDashboardUrl(selectedTeam);
-    return NextResponse.redirect(new URL(redirectUrl, request.url));
+  // Allow access to /dashboard without cookie (let the page handle routing)
+  if (pathname === "/dashboard") {
+    return NextResponse.next();
   }
 
-  // If accessing /dashboard, redirect to team-specific dashboard
-  if (pathname === "/dashboard") {
-    const redirectUrl = getTeamDashboardUrl(selectedTeam);
-    return NextResponse.redirect(new URL(redirectUrl, request.url));
+  // Allow access to viewer routes without redirect
+  if (isViewerRoute) {
+    return NextResponse.next();
+  }
+
+  // If no team cookie is set, let the app routes handle it
+  // (dashboard page will create user and redirect appropriately)
+  if (!selectedTeamSlug) {
+    return NextResponse.next();
+  }
+
+  // Check if user is accessing the correct route for their selected team
+  // Admin team: should be on /admin
+  if (selectedTeamSlug === "admin" && !isAdminRoute) {
+    return NextResponse.redirect(new URL("/admin", request.url));
+  }
+  // HR team: should be on /hr
+  if (selectedTeamSlug === "hr" && !isHrRoute) {
+    return NextResponse.redirect(new URL("/hr", request.url));
+  }
+  // Viewer: should be on /viewer
+  if (selectedTeamSlug === "viewer" && !isViewerRoute) {
+    return NextResponse.redirect(new URL("/viewer", request.url));
+  }
+  // Regular team: should be on /team/[slug]
+  if (selectedTeamSlug !== "admin" && selectedTeamSlug !== "hr" && selectedTeamSlug !== "viewer") {
+    const expectedPath = `/team/${selectedTeamSlug}`;
+    if (!pathname.startsWith(expectedPath)) {
+      return NextResponse.redirect(new URL(expectedPath, request.url));
+    }
   }
 
   return NextResponse.next();
-}
-
-function getTeamDashboardUrl(teamType: string): string {
-  switch (teamType) {
-    case "admin":
-      return "/admin";
-    case "hr":
-      return "/hr";
-    case "team":
-      return "/team";
-    default:
-      return "/admin";
-  }
 }
 
 // Configure which routes the proxy runs on

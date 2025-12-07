@@ -2,7 +2,7 @@ import { create } from "zustand";
 import { persist } from "zustand/middleware";
 
 // Team types for navigation - maps slug to navigation type
-export type TeamType = "admin" | "hr" | "team";
+export type TeamType = "admin" | "hr" | "team" | "viewer";
 
 export interface TeamData {
   id: string;
@@ -14,7 +14,12 @@ export interface TeamData {
 }
 
 // Map team slug to navigation type
-export function getTeamType(slug: string): TeamType {
+export function getTeamType(slug: string, role?: string): TeamType {
+  // If role is VIEWER, always return viewer type
+  if (role === "VIEWER") {
+    return "viewer";
+  }
+
   switch (slug) {
     case "admin":
       return "admin";
@@ -32,6 +37,7 @@ export function toTeamData(team: {
   slug: string;
   logo?: string | null;
   plan?: string;
+  role?: string;
 }): TeamData {
   return {
     id: team.id,
@@ -39,30 +45,30 @@ export function toTeamData(team: {
     slug: team.slug,
     logo: team.logo,
     plan: team.plan,
-    type: getTeamType(team.slug),
+    type: getTeamType(team.slug, team.role),
   };
 }
 
-// Default empty team (shown when no teams loaded yet)
+// Default viewer team (shown when no teams loaded yet or user has no teams)
 const DEFAULT_TEAM: TeamData = {
-  id: "",
-  name: "Loading...",
-  slug: "",
-  type: "team",
+  id: "viewer",
+  name: "Pending Access",
+  slug: "viewer",
+  type: "viewer",
 };
 
-// Helper to set cookie
-function setTeamCookie(teamType: TeamType) {
+// Helper to set cookie - now stores team slug instead of type
+function setTeamCookie(teamSlug: string) {
   if (typeof document !== "undefined") {
-    document.cookie = `selected-team=${teamType}; path=/; max-age=31536000`; // 1 year
+    document.cookie = `selected-team=${teamSlug}; path=/; max-age=31536000`; // 1 year
   }
 }
 
-// Helper to get team from cookie
-function getTeamFromCookie(): TeamType | null {
+// Helper to get team slug from cookie
+function getTeamSlugFromCookie(): string | null {
   if (typeof document === "undefined") return null;
   const match = document.cookie.match(/selected-team=([^;]+)/);
-  return match ? (match[1] as TeamType) : null;
+  return match ? match[1] : null;
 }
 
 interface SidebarState {
@@ -95,21 +101,31 @@ export const useSidebarStore = create<SidebarState>()(
       teams: [],
       setTeams: (teams) => {
         const currentSelected = get().selectedTeam;
-        // If the currently selected team exists in new teams, keep it
-        const stillExists = teams.find((t) => t.id === currentSelected.id);
-        if (!stillExists && teams.length > 0) {
-          // Select the first team if current selection doesn't exist
-          set({ teams, selectedTeam: teams[0] });
-          setTeamCookie(teams[0].type);
+
+        // First, try to get team from cookie (slug-based)
+        const cookieSlug = getTeamSlugFromCookie();
+        const teamFromCookie = cookieSlug ? teams.find((t) => t.slug === cookieSlug) : null;
+
+        if (teamFromCookie) {
+          // Use team from cookie if it exists in the new teams
+          set({ teams, selectedTeam: teamFromCookie });
         } else {
-          set({ teams });
+          // Check if currently selected team still exists
+          const stillExists = teams.find((t) => t.id === currentSelected.id);
+          if (!stillExists && teams.length > 0) {
+            // Select the first team if current selection doesn't exist
+            set({ teams, selectedTeam: teams[0] });
+            setTeamCookie(teams[0].slug);
+          } else {
+            set({ teams });
+          }
         }
       },
 
       // Default to empty team until loaded
       selectedTeam: DEFAULT_TEAM,
       setSelectedTeam: (team) => {
-        setTeamCookie(team.type);
+        setTeamCookie(team.slug);
         set({ selectedTeam: team });
       },
 
@@ -126,10 +142,10 @@ export const useSidebarStore = create<SidebarState>()(
 
       // Initialize from cookie on client
       initFromCookie: () => {
-        const teamType = getTeamFromCookie();
-        if (teamType) {
+        const teamSlug = getTeamSlugFromCookie();
+        if (teamSlug) {
           const teams = get().teams;
-          const team = teams.find((t) => t.type === teamType);
+          const team = teams.find((t) => t.slug === teamSlug);
           if (team) {
             set({ selectedTeam: team });
           }
@@ -145,7 +161,7 @@ export const useSidebarStore = create<SidebarState>()(
       onRehydrateStorage: () => (state) => {
         // Sync cookie with persisted state on rehydration
         if (state?.selectedTeam) {
-          setTeamCookie(state.selectedTeam.type);
+          setTeamCookie(state.selectedTeam.slug);
         }
       },
     }

@@ -40,6 +40,7 @@ import {
   type Attendance,
   type Break,
 } from "@/lib/hooks/use-attendance";
+import { useSidebarStore } from "@/lib/stores/sidebar-store";
 
 type BreakType = "SHORT" | "LUNCH" | "PERSONAL" | "OTHER";
 
@@ -63,6 +64,10 @@ function getTimezoneLabel(timezone: string): string {
 }
 
 export function ClockInOut() {
+  // Check if user is a viewer
+  const selectedTeam = useSidebarStore((state) => state.selectedTeam);
+  const isViewer = selectedTeam.type === "viewer";
+
   // TanStack Query hooks
   const { data, isLoading } = useAttendance();
   const attendanceAction = useAttendanceAction();
@@ -281,10 +286,10 @@ export function ClockInOut() {
             <div className="h-4 w-20 animate-pulse rounded bg-muted" />
             <div className="h-3 w-8 animate-pulse rounded bg-muted" />
           </div>
-          
+
           {/* Separator */}
           <div className="h-3 w-px bg-muted" />
-          
+
           {/* LA Time Skeleton */}
           <div className="flex items-center gap-1.5">
             <div className="h-3 w-3 animate-pulse rounded bg-muted" />
@@ -293,11 +298,11 @@ export function ClockInOut() {
           </div>
         </div>
 
-        {/* Separator Skeleton */}
-        <div className="hidden md:block h-4 w-px bg-muted" />
+        {/* Separator Skeleton - only show for non-viewers */}
+        {!isViewer && <div className="hidden md:block h-4 w-px bg-muted" />}
 
-        {/* Button Skeleton */}
-        <div className="h-8 w-24 animate-pulse rounded-md bg-muted" />
+        {/* Button Skeleton - only show for non-viewers */}
+        {!isViewer && <div className="h-8 w-24 animate-pulse rounded-md bg-muted" />}
       </div>
     );
   }
@@ -348,11 +353,11 @@ export function ClockInOut() {
           )}
         </div>
 
-        {/* Separator */}
-        <div className="hidden md:block h-4 w-px bg-border" />
+        {/* Separator - only show for non-viewers */}
+        {!isViewer && <div className="hidden md:block h-4 w-px bg-border" />}
 
-        {/* Timer Display */}
-        {(isClockedIn || isOnBreak) && (
+        {/* Timer Display - only show for non-viewers */}
+        {!isViewer && (isClockedIn || isOnBreak) && (
           <div
             className={cn(
               "flex items-center gap-1.5 rounded-md px-2 py-1 text-sm font-mono",
@@ -367,8 +372,8 @@ export function ClockInOut() {
           </div>
         )}
 
-        {/* Clock In Button */}
-        {isClockedOut && (
+        {/* Clock In Button - only show for non-viewers */}
+        {!isViewer && isClockedOut && (
           <Tooltip>
             <TooltipTrigger asChild>
               <Button
@@ -386,8 +391,8 @@ export function ClockInOut() {
           </Tooltip>
         )}
 
-        {/* Actions Menu when clocked in */}
-        {(isClockedIn || isOnBreak) && (
+        {/* Actions Menu when clocked in - only show for non-viewers */}
+        {!isViewer && (isClockedIn || isOnBreak) && (
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button

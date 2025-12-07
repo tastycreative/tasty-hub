@@ -18,14 +18,26 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    // Find current user in database
+    // Find current user in database with their teams
     const dbUser = await prisma.user.findUnique({
       where: { stackAuthId: user.id },
+      include: {
+        userTeams: {
+          include: {
+            team: true,
+          },
+        },
+      },
     });
 
     if (!dbUser) {
       return NextResponse.json({ error: "User not found" }, { status: 404 });
     }
+
+    // Check if user is HR or Admin
+    const isHrOrAdmin = dbUser.userTeams.some(
+      (ut: { team: { slug: string } }) => ut.team.slug === "hr" || ut.team.slug === "admin"
+    );
 
     // Get query parameters
     const searchParams = request.nextUrl.searchParams;
@@ -35,19 +47,34 @@ export async function GET(request: NextRequest) {
     const limit = searchParams.get("limit");
 
     // Determine which user's attendance to fetch
-    // If userId is provided and not equal to current user, check if current user has HR permissions
-    let targetUserId = dbUser.id;
+    let targetUserId: string | undefined;
 
-    if (userIdParam && userIdParam !== dbUser.id) {
-      // TODO: Add permission check here - only HR should be able to view other users' attendance
-      // For now, we'll allow it (will be restricted by route protection)
+    if (userIdParam) {
+      // If userId is explicitly provided, use it (requires HR/Admin permission if different from current user)
+      if (userIdParam !== dbUser.id && !isHrOrAdmin) {
+        return NextResponse.json(
+          { error: "Unauthorized to view other users' attendance" },
+          { status: 403 }
+        );
+      }
       targetUserId = userIdParam;
+    } else {
+      // If no userId provided:
+      // - HR/Admin: show all users (don't filter by userId)
+      // - Regular users: show only their own
+      if (!isHrOrAdmin) {
+        targetUserId = dbUser.id;
+      }
+      // If HR/Admin and no userId, leave targetUserId undefined to fetch all users
     }
 
     // Build where clause
-    const where: any = {
-      userId: targetUserId,
-    };
+    const where: any = {};
+
+    // Only filter by userId if targetUserId is set
+    if (targetUserId) {
+      where.userId = targetUserId;
+    }
 
     if (startDate || endDate) {
       where.date = {};
