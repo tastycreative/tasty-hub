@@ -2,21 +2,20 @@ import { AuthCard } from "@/components/auth/auth-card";
 import { Field, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 
-export function LoginForm({
-  className,
-  ...props
-}: React.ComponentProps<"div">) {
+interface LoginFormProps {
+  className?: string;
+}
+
+export function LoginForm({ className }: LoginFormProps) {
   return (
     <AuthCard
       className={className}
       title="Welcome back"
-      description="Login with your Apple or Google account"
-      oauthText="Login with Google"
+      description="Enter your email and password to login"
       submitText="Login"
-      footerText="Don't have an account?"
-      footerLinkText="Sign up"
-      footerLinkHref="/sign-up"
-      {...props}
+      footerText=""
+      footerLinkText=""
+      footerLinkHref=""
     >
       <Field>
         <FieldLabel htmlFor="email">Email</FieldLabel>

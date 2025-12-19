@@ -12,6 +12,7 @@ export interface User {
   stackAuthId: string;
   name: string;
   email: string;
+  displayName?: string;
   avatarUrl: string | null;
   createdAt: string;
   updatedAt: string;

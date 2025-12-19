@@ -2,21 +2,20 @@ import { AuthCard } from "@/components/auth/auth-card";
 import { Field, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 
-export function SignupForm({
-  className,
-  ...props
-}: React.ComponentProps<"div">) {
+interface SignupFormProps {
+  className?: string;
+}
+
+export function SignupForm({ className }: SignupFormProps) {
   return (
     <AuthCard
       className={className}
       title="Create an account"
-      description="Sign up with your Apple or Google account"
-      oauthText="Sign up with Google"
+      description="Enter your details to create an account"
       submitText="Sign Up"
       footerText="Already have an account?"
       footerLinkText="Sign in"
       footerLinkHref="/sign-in"
-      {...props}
     >
       <Field>
         <FieldLabel htmlFor="name">Full Name</FieldLabel>
