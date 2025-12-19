@@ -395,6 +395,12 @@ const getNormalDocs = (slug: string) => [
 // Navigation config for Viewer (pending access)
 const viewerNavMain = [
   {
+    title: "My Timesheet",
+    url: "/viewer/timesheet",
+    icon: Clock,
+    isActive: true,
+  },
+  {
     title: "My Profile",
     url: "#",
     icon: UserCog,
@@ -471,16 +477,25 @@ function getTeamDashboardUrl(teamType: TeamType, slug: string): string {
 export function AppSidebar({ ...props }: AppSidebarProps) {
   const router = useRouter();
   const { teams: storeTeams, setTeams, selectedTeam, setSelectedTeam } = useSidebarStore();
-  const [isHydrated, setIsHydrated] = React.useState(false);
-  const [isLoading, setIsLoading] = React.useState(true);
 
-  // Wait for hydration to prevent mismatch
-  React.useEffect(() => {
-    setIsHydrated(true);
-  }, []);
+  // Only show loading if teams haven't been loaded yet
+  const [isLoading, setIsLoading] = React.useState(storeTeams.length === 0);
 
-  // Fetch teams from API
+  // Prevent double fetch with a ref
+  const hasFetchedRef = React.useRef(false);
+
+  // Fetch teams from API only once on mount
   const fetchTeams = React.useCallback(async () => {
+    // Prevent double fetch in Strict Mode
+    if (hasFetchedRef.current) return;
+    hasFetchedRef.current = true;
+
+    // Skip loading if teams already exist (from Zustand persist)
+    if (storeTeams.length > 0) {
+      setIsLoading(false);
+      return;
+    }
+
     try {
       const response = await fetch("/api/teams/my");
       if (response.ok) {
@@ -504,11 +519,12 @@ export function AppSidebar({ ...props }: AppSidebarProps) {
     } finally {
       setIsLoading(false);
     }
-  }, [setTeams]);
+  }, [setTeams, storeTeams.length]);
 
   React.useEffect(() => {
     fetchTeams();
-  }, [fetchTeams]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // Only run once on mount, ignore deps to prevent re-fetch
 
   // Get teams with icons
   const teams = React.useMemo(() => getTeamsWithIcons(storeTeams), [storeTeams]);
@@ -540,8 +556,8 @@ export function AppSidebar({ ...props }: AppSidebarProps) {
     [storeTeams, setSelectedTeam, router]
   );
 
-  // Show skeleton during hydration
-  if (!isHydrated || isLoading) {
+  // Show skeleton ONLY during initial loading (not during hydration)
+  if (isLoading && storeTeams.length === 0) {
     return (
       <Sidebar collapsible="icon" {...props}>
         <SidebarHeader>
@@ -628,7 +644,7 @@ export function AppSidebar({ ...props }: AppSidebarProps) {
   }
 
   return (
-    <Sidebar collapsible="icon" {...props}>
+    <Sidebar collapsible="icon" {...props} style={{ transition: 'none' }}>
       <SidebarHeader>
         <SidebarMenu>
           <SidebarMenuItem>
@@ -647,14 +663,17 @@ export function AppSidebar({ ...props }: AppSidebarProps) {
             </SidebarMenuButton>
           </SidebarMenuItem>
         </SidebarMenu>
-        <TeamSwitcher
-          teams={teams}
-          activeTeam={activeTeam}
-          onTeamChange={handleTeamChange}
-          onRefetchTeams={fetchTeams}
-        />
+        {/* Hide team switcher for viewers */}
+        {activeTeam.type !== "viewer" && (
+          <TeamSwitcher
+            teams={teams}
+            activeTeam={activeTeam}
+            onTeamChange={handleTeamChange}
+            onRefetchTeams={fetchTeams}
+          />
+        )}
       </SidebarHeader>
-      <SidebarContent>
+      <SidebarContent style={{ opacity: 1, transition: 'none' }}>
         <NavMain items={navMain} />
         <NavProjects projects={docs} label="Docs" />
       </SidebarContent>

@@ -59,8 +59,7 @@ export function SignupForm({
     <AuthCard
       className={className}
       title="Create an account"
-      description="Sign up with your Google account"
-      oauthText="Sign up with Google"
+      description="Enter your details to create an account"
       submitText="Sign Up"
       footerText="Already have an account?"
       footerLinkText="Sign in"

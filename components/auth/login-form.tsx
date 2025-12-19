@@ -46,12 +46,11 @@ export function LoginForm({
     <AuthCard
       className={className}
       title="Welcome back"
-      description="Login with your Google account"
-      oauthText="Login with Google"
+      description="Enter your email and password to login"
       submitText="Login"
-      footerText="Don't have an account?"
-      footerLinkText="Sign up"
-      footerLinkHref="/sign-up"
+      footerText=""
+      footerLinkText=""
+      footerLinkHref=""
       onSubmit={handleSubmit}
       isLoading={isLoading}
       {...props}

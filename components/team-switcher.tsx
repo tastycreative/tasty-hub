@@ -83,19 +83,21 @@ export function TeamSwitcher({
             <DropdownMenuLabel className="text-muted-foreground text-xs">
               Teams
             </DropdownMenuLabel>
-            {teams.map((team, index) => (
-              <DropdownMenuItem
-                key={team.name}
-                onClick={() => onTeamChange(team)}
-                className="gap-2 p-2"
-              >
-                <div className="flex size-6 items-center justify-center rounded-md border">
-                  <team.logo className="size-3.5 shrink-0" />
-                </div>
-                {team.name}
-                <DropdownMenuShortcut>⌘{index + 1}</DropdownMenuShortcut>
-              </DropdownMenuItem>
-            ))}
+            {teams
+              .filter((team) => team.type !== "viewer")
+              .map((team, index) => (
+                <DropdownMenuItem
+                  key={team.name}
+                  onClick={() => onTeamChange(team)}
+                  className="gap-2 p-2"
+                >
+                  <div className="flex size-6 items-center justify-center rounded-md border">
+                    <team.logo className="size-3.5 shrink-0" />
+                  </div>
+                  {team.name}
+                  <DropdownMenuShortcut>⌘{index + 1}</DropdownMenuShortcut>
+                </DropdownMenuItem>
+              ))}
             {/* Only show Add team button if user is admin or hr */}
             {(activeTeam.type === "admin" || activeTeam.type === "hr") && (
               <>
