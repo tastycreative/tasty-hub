@@ -88,7 +88,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Create team with owner and user-team relationship in a transaction
-    const team = await prisma.$transaction(async (tx: typeof prisma) => {
+    const team = await prisma.$transaction(async (tx) => {
       // Create the team
       const newTeam = await tx.team.create({
         data: {
